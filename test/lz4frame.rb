@@ -70,11 +70,11 @@ assert("LZ4 Frame API - stream processing (huge)") do
 
   LZ4::Decoder.wrap(d) do |lz4|
     off = 0
-    slicesize = 777
+    slicesize = 3
     while off < s.bytesize
       assert_equal s.byteslice(off, slicesize).hash, lz4.read(slicesize).hash
       off += slicesize
-      slicesize = slicesize * 3 + 7
+      slicesize = slicesize * 2 + 3
     end
 
     assert_equal nil.hash, lz4.read(slicesize).hash

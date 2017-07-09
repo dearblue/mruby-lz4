@@ -874,7 +874,7 @@ dec_read(MRB, VALUE self)
         const char *srcp = RSTRING_PTR(p->inbuf) + p->inoff;
         size_t srcsize = RSTRING_LEN(p->inbuf) - p->inoff;
         char *destp = RSTRING_PTR(dest) + RSTRING_LEN(dest);
-        size_t destsize = RSTRING_CAPA(dest) - RSTRING_LEN(dest);
+        size_t destsize = (size < 0 ? RSTRING_CAPA(dest) : size) - RSTRING_LEN(dest);
         size_t s = LZ4F_decompress(p->lz4f, destp, &destsize, srcp, &srcsize, NULL);
         p->inoff += srcsize;
         RSTR_SET_LEN(RSTRING(dest), RSTRING_LEN(dest) + destsize);
