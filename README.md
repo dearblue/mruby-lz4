@@ -1,7 +1,7 @@
 # mruby-lz4 : mruby bindings for lz4 the compression library (unofficial)
 
   * Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
-  * Version: 0.1
+  * Version: 0.2
   * Product quality: PROTOTYPE
   * Author: [dearblue](https://github.com/dearblue)
   * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
