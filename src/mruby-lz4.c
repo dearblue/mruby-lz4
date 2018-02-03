@@ -837,19 +837,8 @@ common_read_args(MRB, intptr_t *size, VALUE *dest)
         AUX_NOT_REACHED_HERE;
     }
 
-    if (*size < 0) {
-        if (NIL_P(*dest)) {
-            *dest = mrb_str_buf_new(mrb, AUX_LZ4_DEFAULT_PARTIAL_SIZE);
-        }
-        mrb_str_resize(mrb, *dest, AUX_LZ4_DEFAULT_PARTIAL_SIZE);
-    } else {
-        if (NIL_P(*dest)) {
-            *dest = mrb_str_buf_new(mrb, *size);
-        }
-        mrb_str_resize(mrb, *dest, *size);
-    }
-
-    RSTR_SET_LEN(RSTRING(*dest), 0);
+    *dest = VALUE(mrbx_str_force_recycle(mrb, *dest, (*size < 0 ? AUX_LZ4_DEFAULT_PARTIAL_SIZE : *size)));
+    mrbx_str_set_len(mrb, *dest, 0);
 }
 
 static int
