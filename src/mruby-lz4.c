@@ -49,7 +49,7 @@ aux_str_alloc(MRB, VALUE str, size_t size)
     } else {
         mrb_str_modify(mrb, RSTRING(str));
     }
-    mrbx_str_reserve(mrb, RSTRING(str), size);
+    mrbx_str_reserve(mrb, str, size);
 
     return str;
 }
@@ -313,7 +313,7 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
         *dest = aux_str_buf_new(mrb, maxsize);
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
-        mrbx_str_reserve(mrb, RSTRING(*dest), maxsize);
+        mrbx_str_reserve(mrb, *dest, maxsize);
         mrbx_str_set_len(mrb, *dest, 0);
     }
 }
@@ -446,7 +446,7 @@ enc_initialize(MRB, VALUE self)
     size_t s = LZ4F_compressBegin(p->lz4f, RSTRING_PTR(p->outbuf), RSTRING_CAPA(p->outbuf), &p->prefs);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressBegin");
     mrbx_str_set_len(mrb, p->outbuf, s);
-    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
+    FUNCALL(mrb, p->io, "<<", p->outbuf);
 
     return self;
 }
@@ -473,7 +473,7 @@ enc_write(MRB, VALUE self)
         size_t s = LZ4F_compressUpdate(p->lz4f, dest, outsize, src, insize, &opts);
         aux_lz4f_check_error(mrb, s, "LZ4F_compressUpdate");
         mrbx_str_set_len(mrb, p->outbuf, s);
-        FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
+        FUNCALL(mrb, p->io, "<<", p->outbuf);
         src += insize;
         srclen -= insize;
     }
@@ -498,7 +498,7 @@ enc_flush(MRB, VALUE self)
     size_t s = LZ4F_flush(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_flush");
     mrbx_str_set_len(mrb, p->outbuf, s);
-    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
+    FUNCALL(mrb, p->io, "<<", p->outbuf);
 
     return self;
 }
@@ -520,7 +520,7 @@ enc_close(MRB, VALUE self)
     size_t s = LZ4F_compressEnd(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressEnd");
     mrbx_str_set_len(mrb, p->outbuf, s);
-    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
+    FUNCALL(mrb, p->io, "<<", p->outbuf);
 
     return self;
 }
@@ -835,7 +835,7 @@ dec_read_fetch(MRB, VALUE self, struct decoder *p)
     if (p->inoff >= RSTRING_LEN(p->inbuf)) {
         if (p->inbufsize < 1) { p->inbufsize = 0; return -1; }
 
-        VALUE v = FUNCALL(mrb, p->inport, SYMBOL("read"), mrb_fixnum_value(p->inbufsize), p->inbuf);
+        VALUE v = FUNCALL(mrb, p->inport, "read", mrb_fixnum_value(p->inbufsize), p->inbuf);
         if (NIL_P(v)) { p->inbufsize = 0; return -1; }
         mrb_check_type(mrb, v, MRB_TT_STRING);
         if (RSTRING_LEN(v) < 1) { p->inbufsize = 0; return -1; }
@@ -886,7 +886,7 @@ dec_read(MRB, VALUE self)
         if (size < 0 && RSTRING_LEN(dest) >= RSTRING_CAPA(dest)) {
             size_t capa = RSTRING_CAPA(dest) + AUX_LZ4_DEFAULT_PARTIAL_SIZE;
             capa = MIN(capa, AUX_STR_MAX);
-            mrbx_str_reserve(mrb, RSTRING(dest), capa);
+            mrbx_str_reserve(mrb, dest, capa);
         }
     }
 
@@ -1048,7 +1048,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
-    mrbx_str_reserve(mrb, RSTRING(*dest), maxdest);
+    mrbx_str_reserve(mrb, *dest, maxdest);
     mrbx_str_set_len(mrb, *dest, 0);
 }
 
@@ -1204,7 +1204,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
-    mrbx_str_reserve(mrb, RSTRING(*dest), maxdest);
+    mrbx_str_reserve(mrb, *dest, maxdest);
 }
 
 /*
