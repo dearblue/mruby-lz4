@@ -8,8 +8,8 @@
   * Licensing: BSD-2-Clause License
   * Dependency external mrbgems: (NONE)
   * Bundled C libraries (git-submodule'd):
-      * [lz4-1.7.5](https://github.com/lz4/lz4)
-        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.7.5/LICENSE)
+      * [lz4-1.8.1.2](https://github.com/lz4/lz4)
+        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.8.1.2/LICENSE)
         by [Yann Collet](https://github.com/Cyan4973)
 
 
