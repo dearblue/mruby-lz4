@@ -16,7 +16,7 @@
 
 #define AUX_OR_DEFAULT(primary, secondary) (NIL_P(primary) ? (secondary) : (primary))
 #define CLAMP(n, min, max) (n < min ? min : (n > max ? max : n))
-#define CLAMP_MAX(n, max) (n > max ? max : n)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define AUX_STR_MAX MRBX_STR_MAX
 
 #define AUX_NOT_REACHED_HERE                                \
@@ -34,14 +34,14 @@
 static inline VALUE
 aux_str_buf_new(MRB, size_t size)
 {
-    return mrb_str_buf_new(mrb, CLAMP_MAX(size, AUX_STR_MAX));
+    return mrb_str_buf_new(mrb, MIN(size, AUX_STR_MAX));
 }
 
 static inline VALUE
 aux_str_resize(MRB, VALUE str, size_t size)
 {
     size_t len = RSTRING_LEN(str);
-    mrb_str_resize(mrb, str, CLAMP_MAX(size, AUX_STR_MAX));
+    mrb_str_resize(mrb, str, MIN(size, AUX_STR_MAX));
     mrbx_str_set_len(mrb, str, len);
     return str;
 }
@@ -316,7 +316,7 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
         maxsize = LZ4F_compressFrameBound(RSTRING_LEN(*src), prefs);
     }
 
-    maxsize = CLAMP_MAX(maxsize, AUX_STR_MAX);
+    maxsize = MIN(maxsize, AUX_STR_MAX);
 
     if (NIL_P(*dest)) {
         *dest = aux_str_buf_new(mrb, maxsize);
@@ -409,7 +409,7 @@ enc_s_new(MRB, VALUE self)
     aux_lz4f_check_error(mrb, err, "LZ4F_createCompressionContext");
     p->io = Qnil;
     p->outbuf = Qnil;
-    p->outbufsize = CLAMP_MAX(256 << 10, AUX_STR_MAX); /* AUX_STR_MAX or 256 KiB */
+    p->outbufsize = MIN(256 << 10, AUX_STR_MAX); /* AUX_STR_MAX or 256 KiB */
 
     VALUE obj = mrb_obj_value(rd);
     mrb_int argc;
@@ -475,7 +475,7 @@ enc_write(MRB, VALUE self)
     const LZ4F_compressOptions_t opts = { .stableSrc = 0, };
 
     while (srclen > 0) {
-        size_t insize = CLAMP_MAX(srclen, 4 * 1024 * 1024);
+        size_t insize = MIN(srclen, 4 * 1024 * 1024);
         size_t outsize = LZ4F_compressBound(insize, &p->prefs);
         encoder_set_outbuf(mrb, self, p, aux_str_alloc(mrb, p->outbuf, outsize));
         char *dest = RSTRING_PTR(p->outbuf);
@@ -763,7 +763,7 @@ dec_s_new(MRB, VALUE self)
     aux_lz4f_check_error(mrb, err, "LZ4F_createDecompressionContext");
     p->inport = Qnil;
     p->inbuf = Qnil;
-    p->inbufsize = CLAMP_MAX(1 << 20, AUX_STR_MAX); /* AUX_STR_MAX or 1 MiB */
+    p->inbufsize = MIN(1 << 20, AUX_STR_MAX); /* AUX_STR_MAX or 1 MiB */
 
     mrb_int argc;
     VALUE *argv;
@@ -894,7 +894,7 @@ dec_read(MRB, VALUE self)
 
         if (size < 0 && RSTRING_LEN(dest) >= RSTRING_CAPA(dest)) {
             size_t capa = RSTRING_CAPA(dest) + AUX_LZ4_DEFAULT_PARTIAL_SIZE;
-            capa = CLAMP_MAX(capa, AUX_STR_MAX);
+            capa = MIN(capa, AUX_STR_MAX);
             aux_str_resize(mrb, dest, capa);
         }
     }
@@ -1050,7 +1050,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
     if (maxdest == -1) {
         maxdest = LZ4_compressBound(RSTRING_LEN(*src));
     }
-    maxdest = CLAMP_MAX(maxdest, AUX_STR_MAX);
+    maxdest = MIN(maxdest, AUX_STR_MAX);
 
     if (NIL_P(*dest)) {
         *dest = aux_str_buf_new(mrb, maxdest);
@@ -1206,7 +1206,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
     if (maxdest == -1) {
         maxdest = aux_lz4_scan_size(mrb, RSTRING_PTR(*src), RSTRING_LEN(*src));
     }
-    maxdest = (int32_t)CLAMP_MAX((int64_t)maxdest, (int64_t)AUX_STR_MAX);
+    maxdest = (int32_t)MIN((int64_t)maxdest, (int64_t)AUX_STR_MAX);
 
     if (NIL_P(*dest)) {
         *dest = aux_str_buf_new(mrb, maxdest);
