@@ -1209,7 +1209,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
     if (maxdest == -1) {
         maxdest = aux_lz4_scan_size(mrb, RSTRING_PTR(*src), RSTRING_LEN(*src));
     }
-    maxdest = CLAMP_MAX((int64_t)maxdest, (int64_t)AUX_STR_MAX);
+    maxdest = (int32_t)CLAMP_MAX((int64_t)maxdest, (int64_t)AUX_STR_MAX);
 
     if (NIL_P(*dest)) {
         *dest = aux_str_buf_new(mrb, maxdest);
