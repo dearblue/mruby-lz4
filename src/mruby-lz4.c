@@ -682,11 +682,15 @@ dec_s_decode(MRB, VALUE self)
     s = LZ4F_createDecompressionContext(&context, LZ4F_VERSION);
     aux_lz4f_check_error(mrb, s, "LZ4F_createDecompressionContext");
 
-    if (maxdest < 0) {
-        dec_s_decode_all(mrb, self, src, dest, context);
-    } else {
-        dec_s_decode_partial(mrb, self, src, dest, maxdest, context);
-    }
+    MRBX_ENTER(mrb);
+        if (maxdest < 0) {
+            dec_s_decode_all(mrb, self, src, dest, context);
+        } else {
+            dec_s_decode_partial(mrb, self, src, dest, maxdest, context);
+        }
+    MRBX_INERROR();
+        LZ4F_freeDecompressionContext(context);
+    MRBX_LEAVE();
 
     LZ4F_freeDecompressionContext(context);
 
