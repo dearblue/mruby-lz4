@@ -8,15 +8,15 @@
 #include <lz4.h>
 #include <lz4hc.h>
 #include <lz4frame.h>
-#include "extdefs.h"
-#include "mrbx_kwargs.h"
+#include <mruby-aux.h>
+#include <mruby-aux/scanhash.h>
 
 #define AUX_LZ4_DEFAULT_PARTIAL_SIZE ((uint32_t)256 << 10)
 
 #define AUX_OR_DEFAULT(primary, secondary) (NIL_P(primary) ? (secondary) : (primary))
 #define CLAMP(n, min, max) (n < min ? min : (n > max ? max : n))
 #define CLAMP_MAX(n, max) (n > max ? max : n)
-#define AUX_STR_MAX (MRB_INT_MAX - 1)
+#define AUX_STR_MAX MRBX_STR_MAX
 
 #define AUX_NOT_REACHED_HERE                                \
     do {                                                    \
@@ -461,7 +461,7 @@ enc_initialize(MRB, VALUE self)
     size_t s = LZ4F_compressBegin(p->lz4f, RSTRING_PTR(p->outbuf), RSTRING_CAPA(p->outbuf), &p->prefs);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressBegin");
     aux_str_set_len(p->outbuf, s);
-    FUNCALLC(mrb, p->io, "<<", p->outbuf);
+    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
 }
@@ -488,7 +488,7 @@ enc_write(MRB, VALUE self)
         size_t s = LZ4F_compressUpdate(p->lz4f, dest, outsize, src, insize, &opts);
         aux_lz4f_check_error(mrb, s, "LZ4F_compressUpdate");
         aux_str_set_len(p->outbuf, s);
-        FUNCALLC(mrb, p->io, "<<", p->outbuf);
+        FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
         src += insize;
         srclen -= insize;
     }
@@ -513,7 +513,7 @@ enc_flush(MRB, VALUE self)
     size_t s = LZ4F_flush(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_flush");
     aux_str_set_len(p->outbuf, s);
-    FUNCALLC(mrb, p->io, "<<", p->outbuf);
+    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
 }
@@ -535,7 +535,7 @@ enc_close(MRB, VALUE self)
     size_t s = LZ4F_compressEnd(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressEnd");
     aux_str_set_len(p->outbuf, s);
-    FUNCALLC(mrb, p->io, "<<", p->outbuf);
+    FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
 }
@@ -835,7 +835,7 @@ dec_read_fetch(MRB, VALUE self, struct decoder *p)
     if (p->inoff >= RSTRING_LEN(p->inbuf)) {
         if (p->inbufsize < 1) { p->inbufsize = 0; return -1; }
 
-        VALUE v = FUNCALLC(mrb, p->inport, "read", mrb_fixnum_value(p->inbufsize), p->inbuf);
+        VALUE v = FUNCALL(mrb, p->inport, SYMBOL("read"), mrb_fixnum_value(p->inbufsize), p->inbuf);
         if (NIL_P(v)) { p->inbufsize = 0; return -1; }
         mrb_check_type(mrb, v, MRB_TT_STRING);
         if (RSTRING_LEN(v) < 1) { p->inbufsize = 0; return -1; }
@@ -1141,7 +1141,7 @@ blkdec_s_decode_size(MRB, VALUE self)
     mrb_get_args(mrb, "S", &src);
 
     uint32_t size = aux_lz4_scan_size(mrb, RSTRING_PTR(src), RSTRING_LEN(src));
-    if (size > MRB_INT_MAX) {
+    if ((uint64_t)size > (uint64_t)MRB_INT_MAX) {
         return mrb_float_value(mrb, size);
     } else {
         return mrb_fixnum_value(size);
@@ -1197,7 +1197,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
     if (maxdest == -1) {
         maxdest = aux_lz4_scan_size(mrb, RSTRING_PTR(*src), RSTRING_LEN(*src));
     }
-    maxdest = CLAMP_MAX(maxdest, AUX_STR_MAX);
+    maxdest = CLAMP_MAX((int64_t)maxdest, (int64_t)AUX_STR_MAX);
 
     if (NIL_P(*dest)) {
         *dest = aux_str_buf_new(mrb, maxdest);
