@@ -32,13 +32,6 @@
 #define id_read mrb_intern_lit(mrb, "read")
 
 static inline VALUE
-aux_str_set_len(VALUE str, mrb_int size)
-{
-    RSTR_SET_LEN(RSTRING(str), size);
-    return str;
-}
-
-static inline VALUE
 aux_str_buf_new(MRB, size_t size)
 {
     return mrb_str_buf_new(mrb, CLAMP_MAX(size, AUX_STR_MAX));
@@ -49,7 +42,7 @@ aux_str_resize(MRB, VALUE str, size_t size)
 {
     size_t len = RSTRING_LEN(str);
     mrb_str_resize(mrb, str, CLAMP_MAX(size, AUX_STR_MAX));
-    aux_str_set_len(str, len);
+    mrbx_str_set_len(mrb, str, len);
     return str;
 }
 
@@ -330,7 +323,7 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
         aux_str_resize(mrb, *dest, maxsize);
-        aux_str_set_len(*dest, 0);
+        mrbx_str_set_len(mrb, *dest, 0);
     }
 }
 
@@ -350,7 +343,7 @@ enc_s_encode(MRB, VALUE self)
                                   RSTRING_PTR(src), RSTRING_LEN(src),
                                   &prefs);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressFrame");
-    aux_str_set_len(dest, s);
+    mrbx_str_set_len(mrb, dest, s);
     return dest;
 }
 
@@ -461,7 +454,7 @@ enc_initialize(MRB, VALUE self)
     encoder_set_outbuf(mrb, self, p, aux_str_buf_new(mrb, p->outbufsize));
     size_t s = LZ4F_compressBegin(p->lz4f, RSTRING_PTR(p->outbuf), RSTRING_CAPA(p->outbuf), &p->prefs);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressBegin");
-    aux_str_set_len(p->outbuf, s);
+    mrbx_str_set_len(mrb, p->outbuf, s);
     FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
@@ -488,7 +481,7 @@ enc_write(MRB, VALUE self)
         char *dest = RSTRING_PTR(p->outbuf);
         size_t s = LZ4F_compressUpdate(p->lz4f, dest, outsize, src, insize, &opts);
         aux_lz4f_check_error(mrb, s, "LZ4F_compressUpdate");
-        aux_str_set_len(p->outbuf, s);
+        mrbx_str_set_len(mrb, p->outbuf, s);
         FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
         src += insize;
         srclen -= insize;
@@ -513,7 +506,7 @@ enc_flush(MRB, VALUE self)
     char *dest = RSTRING_PTR(p->outbuf);
     size_t s = LZ4F_flush(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_flush");
-    aux_str_set_len(p->outbuf, s);
+    mrbx_str_set_len(mrb, p->outbuf, s);
     FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
@@ -535,7 +528,7 @@ enc_close(MRB, VALUE self)
     char *dest = RSTRING_PTR(p->outbuf);
     size_t s = LZ4F_compressEnd(p->lz4f, dest, outsize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressEnd");
-    aux_str_set_len(p->outbuf, s);
+    mrbx_str_set_len(mrb, p->outbuf, s);
     FUNCALL(mrb, p->io, SYMBOL("<<"), p->outbuf);
 
     return self;
@@ -1065,7 +1058,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
     aux_str_resize(mrb, *dest, maxdest);
-    aux_str_set_len(*dest, 0);
+    mrbx_str_set_len(mrb, *dest, 0);
 }
 
 /*
@@ -1105,7 +1098,7 @@ blkenc_s_encode(MRB, VALUE self)
         s = LZ4_compress_fast_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), RSTRING_CAPA(dest), -level);
         mrb_free(mrb, lz4);
         if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_fast_continue failed (code:%S)", mrb_fixnum_value(s)); }
-        aux_str_set_len(dest, s);
+        mrbx_str_set_len(mrb, dest, s);
     } else {
         int s;
         LZ4_streamHC_t *lz4 = (LZ4_streamHC_t *)mrb_malloc(mrb, sizeof(LZ4_streamHC_t));
@@ -1116,7 +1109,7 @@ blkenc_s_encode(MRB, VALUE self)
         s = LZ4_compress_HC_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), RSTRING_CAPA(dest));
         mrb_free(mrb, lz4);
         if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_HC_continue failed (code:%S)", mrb_fixnum_value(s)); }
-        aux_str_set_len(dest, s);
+        mrbx_str_set_len(mrb, dest, s);
     }
 
     return dest;
@@ -1248,7 +1241,7 @@ blkdec_s_decode(MRB, VALUE self)
     if (s < 0) {
         mrb_raise(mrb, E_RUNTIME_ERROR, "LZ4_decompress_safe_continue failed");
     }
-    aux_str_set_len(dest, s);
+    mrbx_str_set_len(mrb, dest, s);
 
     return dest;
 }
