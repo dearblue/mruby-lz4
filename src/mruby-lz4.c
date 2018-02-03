@@ -49,7 +49,7 @@ aux_str_alloc(MRB, VALUE str, size_t size)
     } else {
         mrb_str_modify(mrb, RSTRING(str));
     }
-    mrbx_str_reserve(mrb, str, size);
+    mrbx_str_reserve(mrb, RSTRING(str), size);
 
     return str;
 }
@@ -313,7 +313,7 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
         *dest = aux_str_buf_new(mrb, maxsize);
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
-        mrbx_str_reserve(mrb, *dest, maxsize);
+        mrbx_str_reserve(mrb, RSTRING(*dest), maxsize);
         mrbx_str_set_len(mrb, *dest, 0);
     }
 }
@@ -886,7 +886,7 @@ dec_read(MRB, VALUE self)
         if (size < 0 && RSTRING_LEN(dest) >= RSTRING_CAPA(dest)) {
             size_t capa = RSTRING_CAPA(dest) + AUX_LZ4_DEFAULT_PARTIAL_SIZE;
             capa = MIN(capa, AUX_STR_MAX);
-            mrbx_str_reserve(mrb, dest, capa);
+            mrbx_str_reserve(mrb, RSTRING(dest), capa);
         }
     }
 
@@ -1048,7 +1048,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
-    mrbx_str_reserve(mrb, *dest, maxdest);
+    mrbx_str_reserve(mrb, RSTRING(*dest), maxdest);
     mrbx_str_set_len(mrb, *dest, 0);
 }
 
@@ -1204,7 +1204,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
-    mrbx_str_reserve(mrb, *dest, maxdest);
+    mrbx_str_reserve(mrb, RSTRING(*dest), maxdest);
 }
 
 /*
