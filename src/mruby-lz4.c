@@ -10,6 +10,7 @@
 #include <lz4frame.h>
 #include <mruby-aux.h>
 #include <mruby-aux/scanhash.h>
+#include <string.h>
 
 #define AUX_LZ4_DEFAULT_PARTIAL_SIZE ((uint32_t)256 << 10)
 
@@ -571,7 +572,7 @@ init_encoder(MRB, struct RClass *mLZ4)
  */
 
 static void
-dec_s_decode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest)
+dec_s_decode_args(MRB, struct RString **src, struct RString **dest, ssize_t *maxdest)
 {
     VALUE *argv;
     mrb_int argc;
@@ -579,24 +580,21 @@ dec_s_decode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest)
 
     switch (argc) {
     case 1:
-        *src = argv[0];
         *maxdest = -1;
-        *dest = Qnil;
+        *dest = NULL;
         break;
     case 2:
-        *src = argv[0];
         if (mrb_string_p(argv[1])) {
-            *dest = argv[1];
+            *dest = RString(argv[1]);
             *maxdest = -1;
         } else {
-            *dest = Qnil;
+            *dest = NULL;
             *maxdest = aux_to_sizet(mrb, argv[1]);
         }
         break;
     case 3:
-        *src = argv[0];
         *maxdest = aux_to_sizet(mrb, argv[1]);
-        *dest = argv[2];
+        *dest = RString(argv[2]);
         break;
     default:
         mrb_raisef(mrb,
@@ -606,16 +604,66 @@ dec_s_decode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest)
         break;
     }
 
-    mrb_check_type(mrb, *src, MRB_TT_STRING);
+    mrb_check_type(mrb, argv[0], MRB_TT_STRING);
+    *src = RSTRING(argv[0]);
 
-    size_t size = (*maxdest == -1 ? AUX_LZ4_DEFAULT_PARTIAL_SIZE : *maxdest);
-    if (NIL_P(*dest)) {
-        *dest = mrb_str_buf_new(mrb, size);
-    } else {
-        mrb_check_type(mrb, *dest, MRB_TT_STRING);
+    size_t size = (*maxdest < 0 ? AUX_LZ4_DEFAULT_PARTIAL_SIZE : *maxdest);
+    *dest = mrbx_str_force_recycle(mrb, *dest, size);
+}
+
+static void
+dec_s_decode_all(MRB, VALUE self, struct RString *src, struct RString *dest, LZ4F_dctx *lz4f)
+{
+    LZ4F_decompressOptions_t opts = { .stableDst = 1, };
+    size_t destoff = 0;
+    size_t maxdest = 0;
+
+    const char *srcp = RSTR_PTR(src);
+    size_t srcsize = RSTR_LEN(src);
+
+    for (;;) {
+        if (!dest || destoff >= maxdest) {
+            maxdest += AUX_LZ4_DEFAULT_PARTIAL_SIZE;
+            dest = mrbx_str_reserve(mrb, dest, maxdest);
+        }
+
+        char *destp = RSTR_PTR(dest) + destoff;
+        size_t destsize = maxdest - destoff;
+
+        size_t s = LZ4F_decompress(lz4f, destp, &destsize, srcp, &srcsize, &opts);
+        aux_lz4f_check_error(mrb, s, "LZ4F_decompress");
+        destoff += destsize;
+        srcp += srcsize;
+        srcsize = RSTR_LEN(src) - (srcp - RSTR_PTR(src));
+
+        if (s > srcsize) {
+            mrb_raise(mrb, E_RUNTIME_ERROR, "``src'' is too small (unexpected termination)");
+        }
+
+        if (s == 0) { break; }
     }
 
-    mrb_str_resize(mrb, *dest, size);
+    mrbx_str_set_len(mrb, dest, destoff);
+}
+
+static void
+dec_s_decode_partial(MRB, VALUE self, struct RString *src, struct RString *dest, size_t maxdest, LZ4F_dctx *lz4f)
+{
+    LZ4F_decompressOptions_t opts = { .stableDst = 1, };
+
+    const char *srcp = RSTR_PTR(src);
+    size_t srcsize = RSTR_LEN(src);
+    char *destp = RSTR_PTR(dest);
+    size_t destsize = maxdest;
+
+    size_t s = LZ4F_decompress(lz4f, destp, &destsize, srcp, &srcsize, &opts);
+    aux_lz4f_check_error(mrb, s, "LZ4F_decompress");
+
+    if (s > 0 && destsize < maxdest) {
+        mrb_raise(mrb, E_RUNTIME_ERROR, "``src'' is too small (unexpected termination)");
+    }
+
+    mrbx_str_set_len(mrb, dest, destsize);
 }
 
 /*
@@ -625,49 +673,24 @@ dec_s_decode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest)
 static VALUE
 dec_s_decode(MRB, VALUE self)
 {
-    VALUE src, dest;
-    size_t maxdest;
+    struct RString *src, *dest;
+    ssize_t maxdest;
     dec_s_decode_args(mrb, &src, &dest, &maxdest);
-    const char *srcp = RSTRING_PTR(src);
-    size_t srcsize = RSTRING_LEN(src);
-    char *destp = RSTRING_PTR(dest);
-    size_t destsize = RSTRING_CAPA(dest);
     LZ4F_dctx *context;
     size_t s;
+
     s = LZ4F_createDecompressionContext(&context, LZ4F_VERSION);
     aux_lz4f_check_error(mrb, s, "LZ4F_createDecompressionContext");
-    LZ4F_decompressOptions_t opts = { .stableDst = 1, };
 
-    if (maxdest == -1) {
-        size_t srcoff = 0;
-        size_t destoff = 0;
-        maxdest = 0;
-        for (;;) {
-            if (NIL_P(dest) || destoff >= RSTRING_CAPA(dest)) {
-                maxdest += AUX_LZ4_DEFAULT_PARTIAL_SIZE;
-                dest = aux_str_resize(mrb, dest, maxdest);
-            }
-            destp = RSTRING_PTR(dest) + destoff;
-            destsize = RSTRING_CAPA(dest) - destoff;
-            srcsize = 0;
-            s = LZ4F_decompress(context, destp, &destsize, NULL, &srcsize, &opts);
-            if (s == 0 || LZ4F_isError(s)) { destsize = destoff; break; }
-            if (destsize == 0) {
-                srcp = RSTRING_PTR(src) + srcoff;
-                srcsize = RSTRING_LEN(src) - srcoff;
-                s = LZ4F_decompress(context, destp, &destsize, srcp, &srcsize, &opts);
-                if (s == 0 || LZ4F_isError(s)) { destsize = destoff; break; }
-            }
-            srcoff += srcsize;
-            destoff += destsize;
-        }
+    if (maxdest < 0) {
+        dec_s_decode_all(mrb, self, src, dest, context);
     } else {
-        s = LZ4F_decompress(context, destp, &destsize, srcp, &srcsize, &opts);
+        dec_s_decode_partial(mrb, self, src, dest, maxdest, context);
     }
+
     LZ4F_freeDecompressionContext(context);
-    aux_lz4f_check_error(mrb, s, "LZ4F_decompress");
-    aux_str_set_len(dest, destsize);
-    return dest;
+
+    return VALUE(dest);
 }
 
 struct decoder
