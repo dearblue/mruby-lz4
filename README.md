@@ -1,15 +1,15 @@
 # mruby-lz4 : mruby bindings for lz4 the compression library (unofficial)
 
   * Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
-  * Version: 0.1
+  * Version: 0.2
   * Product quality: PROTOTYPE
   * Author: [dearblue](https://github.com/dearblue)
   * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
   * Licensing: BSD-2-Clause License
   * Dependency external mrbgems: (NONE)
   * Bundled C libraries (git-submodule'd):
-      * [lz4-1.7.5](https://github.com/lz4/lz4)
-        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.7.5/LICENSE)
+      * [lz4-1.8.1.2](https://github.com/lz4/lz4)
+        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.8.1.2/LICENSE)
         by [Yann Collet](https://github.com/Cyan4973)
 
 
