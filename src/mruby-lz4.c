@@ -1015,7 +1015,10 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, 
         break;
     case 2:
         *src = argv[0];
-        if (mrb_string_p(argv[1])) {
+        if (NIL_P(argv[1])) {
+            *maxdest = -1;
+            *dest = Qnil;
+        } else if (mrb_string_p(argv[1])) {
             *maxdest = -1;
             *dest = argv[1];
         } else {
