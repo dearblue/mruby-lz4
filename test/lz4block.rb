@@ -36,6 +36,8 @@ assert("LZ4 Block API - LZ4::BlockEncoder.encode") do
   assert_raise(ArgumentError) { LZ4::BlockEncoder.encode("", 1, 2, 3) }
   assert_raise(ArgumentError) { LZ4::BlockEncoder.encode("", wrong_keyword: nil) }
   assert_raise(ArgumentError) { LZ4::BlockEncoder.encode("", level: 10, wrong_keyword: nil) }
+  assert_raise(TypeError) { LZ4::BlockEncoder.encode("", level: ->{}) }
+  assert_raise(TypeError) { LZ4::BlockEncoder.encode("", predict: [1, 2, 3, 4]) }
   assert_raise(RuntimeError) { LZ4::BlockEncoder.encode("A", 0) }
 end
 
