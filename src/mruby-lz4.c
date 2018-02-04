@@ -984,6 +984,60 @@ blkenc_s_encode_size(MRB, VALUE self)
 }
 
 static void
+aux_LZ4_resetStream(void *cx, int level)
+{
+    LZ4_resetStream(cx);
+}
+
+static int
+aux_LZ4_loadDict(void *cx, const char *predict, size_t dictsize)
+{
+    return LZ4_loadDict(cx, predict, dictsize);
+}
+
+static int
+aux_LZ4_compress_fast_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
+{
+    return LZ4_compress_fast_continue(cx, src, dest, srcsize, destsize, -level);
+}
+
+static void
+aux_LZ4_resetStreamHC(void *cx, int level)
+{
+    LZ4_resetStreamHC(cx, level);
+}
+
+static int
+aux_LZ4_loadDictHC(void *cx, const char *predict, size_t dictsize)
+{
+    return LZ4_loadDictHC(cx, predict, dictsize);
+}
+
+static int
+aux_LZ4_compress_HC_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
+{
+    return LZ4_compress_HC_continue(cx, src, dest, srcsize, destsize);
+}
+
+struct block_encoder_traits
+{
+    const char *compress_continue_name;
+    size_t context_size;
+    void (*reset_stream)(void *, int);
+    int (*load_dict)(void *, const char *, size_t);
+    int (*compress_continue)(void *, const char *, char *, size_t, size_t, int);
+};
+
+static const struct
+{
+    struct block_encoder_traits fast;
+    struct block_encoder_traits hc;
+} block_encoder_traits = {
+    { "LZ4_compress_fast_continue", sizeof(LZ4_stream_t), aux_LZ4_resetStream, aux_LZ4_loadDict, aux_LZ4_compress_fast_continue },
+    { "LZ4_compress_HC_continue", sizeof(LZ4_streamHC_t), aux_LZ4_resetStreamHC, aux_LZ4_loadDictHC, aux_LZ4_compress_HC_continue },
+};
+
+static void
 blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, VALUE *predict)
 {
     mrb_int argc;
@@ -1086,29 +1140,29 @@ blkenc_s_encode(MRB, VALUE self)
     int level;
     blkenc_s_encode_args(mrb, &src, &dest, &maxdest, &level, &predict);
 
+    const struct block_encoder_traits *traits;
+
     if (level < 0) {
-        int s;
-        LZ4_stream_t *lz4 = (LZ4_stream_t *)mrb_malloc(mrb, sizeof(LZ4_stream_t));
-        LZ4_resetStream(lz4);
-        if (!NIL_P(predict)) {
-            s = LZ4_loadDict(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
-        }
-        s = LZ4_compress_fast_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest, -level);
-        mrb_free(mrb, lz4);
-        if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_fast_continue failed (code:%S)", mrb_fixnum_value(s)); }
-        mrbx_str_set_len(mrb, dest, s);
+        traits = &block_encoder_traits.fast;
     } else {
-        int s;
-        LZ4_streamHC_t *lz4 = (LZ4_streamHC_t *)mrb_malloc(mrb, sizeof(LZ4_streamHC_t));
-        LZ4_resetStreamHC(lz4, level);
-        if (!NIL_P(predict)) {
-            s = LZ4_loadDictHC(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
-        }
-        s = LZ4_compress_HC_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest);
-        mrb_free(mrb, lz4);
-        if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_HC_continue failed (code:%S)", mrb_fixnum_value(s)); }
-        mrbx_str_set_len(mrb, dest, s);
+        traits = &block_encoder_traits.hc;
     }
+
+    int s;
+    void *lz4 = mrb_malloc(mrb, traits->context_size);
+    traits->reset_stream(lz4, level);
+    if (!NIL_P(predict)) {
+        s = traits->load_dict(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
+    }
+    s = traits->compress_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest, level);
+    mrb_free(mrb, lz4);
+    if (s <= 0) {
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "%S failed (code:%S)",
+                   VALUE(traits->compress_continue_name),
+                   VALUE((mrb_int)s));
+    }
+    mrbx_str_set_len(mrb, dest, s);
 
     return dest;
 }
