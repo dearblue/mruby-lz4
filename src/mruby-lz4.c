@@ -984,7 +984,7 @@ blkenc_s_encode_size(MRB, VALUE self)
 }
 
 static void
-blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
+blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, VALUE *predict)
 {
     mrb_int argc;
     VALUE *argv;
@@ -1007,26 +1007,25 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
         *predict = Qnil;
     }
 
-    size_t maxdest;
     switch (argc) {
     case 1:
         *src = argv[0];
-        maxdest = -1;
+        *maxdest = -1;
         *dest = Qnil;
         break;
     case 2:
         *src = argv[0];
         if (mrb_string_p(argv[1])) {
-            maxdest = -1;
+            *maxdest = -1;
             *dest = argv[1];
         } else {
-            maxdest = aux_to_u32(mrb, argv[1]);
+            *maxdest = aux_to_u32(mrb, argv[1]);
             *dest = Qnil;
         }
         break;
     case 3:
         *src = argv[0];
-        maxdest = aux_to_u32(mrb, argv[1]);
+        *maxdest = aux_to_u32(mrb, argv[1]);
         *dest = argv[2];
         break;
     default:
@@ -1038,17 +1037,21 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
 
     mrb_check_type(mrb, *src, MRB_TT_STRING);
 
-    if (maxdest == -1) {
-        maxdest = LZ4_compressBound(RSTRING_LEN(*src));
+    if (*maxdest == -1) {
+        *maxdest = LZ4_compressBound(RSTRING_LEN(*src));
     }
-    maxdest = MIN(maxdest, AUX_STR_MAX);
+
+    if (*maxdest > AUX_STR_MAX) {
+        mrb_raise(mrb, E_RUNTIME_ERROR,
+                  "maxdest (or compress bound) is too large");
+    }
 
     if (NIL_P(*dest)) {
-        *dest = aux_str_buf_new(mrb, maxdest);
+        *dest = aux_str_buf_new(mrb, *maxdest);
     } else {
         mrb_check_type(mrb, *dest, MRB_TT_STRING);
     }
-    mrbx_str_reserve(mrb, *dest, maxdest);
+    mrbx_str_reserve(mrb, *dest, *maxdest);
     mrbx_str_set_len(mrb, *dest, 0);
 }
 
@@ -1076,8 +1079,9 @@ static VALUE
 blkenc_s_encode(MRB, VALUE self)
 {
     VALUE src, dest, predict;
+    size_t maxdest;
     int level;
-    blkenc_s_encode_args(mrb, &src, &dest, &level, &predict);
+    blkenc_s_encode_args(mrb, &src, &dest, &maxdest, &level, &predict);
 
     if (level < 0) {
         int s;
@@ -1086,7 +1090,7 @@ blkenc_s_encode(MRB, VALUE self)
         if (!NIL_P(predict)) {
             s = LZ4_loadDict(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
         }
-        s = LZ4_compress_fast_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), RSTRING_CAPA(dest), -level);
+        s = LZ4_compress_fast_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest, -level);
         mrb_free(mrb, lz4);
         if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_fast_continue failed (code:%S)", mrb_fixnum_value(s)); }
         mrbx_str_set_len(mrb, dest, s);
@@ -1097,7 +1101,7 @@ blkenc_s_encode(MRB, VALUE self)
         if (!NIL_P(predict)) {
             s = LZ4_loadDictHC(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
         }
-        s = LZ4_compress_HC_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), RSTRING_CAPA(dest));
+        s = LZ4_compress_HC_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest);
         mrb_free(mrb, lz4);
         if (s <= 0) { mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_compress_HC_continue failed (code:%S)", mrb_fixnum_value(s)); }
         mrbx_str_set_len(mrb, dest, s);
