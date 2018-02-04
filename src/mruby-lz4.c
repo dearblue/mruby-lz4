@@ -1038,52 +1038,46 @@ static const struct
 };
 
 static void
-blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, VALUE *predict)
+blkenc_s_encode_args(MRB, struct RString **src, struct RString **dest, size_t *maxdest, int *level, struct RString **predict)
 {
     mrb_int argc;
     VALUE *argv;
     mrb_get_args(mrb, "*", &argv, &argc);
     if (argc > 0 && mrb_hash_p(argv[argc - 1])) {
-        VALUE alevel;
+        VALUE alevel, apredict;
         MRBX_SCANHASH(mrb, argv[argc - 1], Qnil,
                 MRBX_SCANHASH_ARGS("level", &alevel, Qnil),
-                MRBX_SCANHASH_ARGS("predict", predict, Qnil));
+                MRBX_SCANHASH_ARGS("predict", &apredict, Qnil));
 
         *level = (NIL_P(alevel) ? -1 : mrb_int(mrb, alevel));
-
-        if (!NIL_P(*predict)) {
-            mrb_check_type(mrb, *predict, MRB_TT_STRING);
-        }
+        *predict = RString(apredict);
 
         argc --;
     } else {
         *level = -1;
-        *predict = Qnil;
+        *predict = NULL;
     }
 
     switch (argc) {
     case 1:
-        *src = argv[0];
         *maxdest = -1;
-        *dest = Qnil;
+        *dest = NULL;
         break;
     case 2:
-        *src = argv[0];
         if (NIL_P(argv[1])) {
             *maxdest = -1;
-            *dest = Qnil;
+            *dest = NULL;
         } else if (mrb_string_p(argv[1])) {
             *maxdest = -1;
-            *dest = argv[1];
+            *dest = RSTRING(argv[1]);
         } else {
             *maxdest = aux_to_u32(mrb, argv[1]);
-            *dest = Qnil;
+            *dest = NULL;
         }
         break;
     case 3:
-        *src = argv[0];
         *maxdest = aux_to_u32(mrb, argv[1]);
-        *dest = argv[2];
+        *dest = RString(argv[2]);
         break;
     default:
         mrb_raisef(mrb,
@@ -1092,10 +1086,11 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, 
                    mrb_fixnum_value(argc));
     }
 
-    mrb_check_type(mrb, *src, MRB_TT_STRING);
+    mrb_check_type(mrb, argv[0], MRB_TT_STRING);
+    *src = RSTRING(argv[0]);
 
     if (*maxdest == -1) {
-        *maxdest = LZ4_compressBound(RSTRING_LEN(*src));
+        *maxdest = LZ4_compressBound(RSTR_LEN(*src));
     }
 
     if (*maxdest > AUX_STR_MAX) {
@@ -1103,12 +1098,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, 
                   "maxdest (or compress bound) is too large");
     }
 
-    if (NIL_P(*dest)) {
-        *dest = aux_str_buf_new(mrb, *maxdest);
-    } else {
-        mrb_check_type(mrb, *dest, MRB_TT_STRING);
-    }
-    mrbx_str_reserve(mrb, *dest, *maxdest);
+    *dest = mrbx_str_force_recycle(mrb, *dest, *maxdest);
     mrbx_str_set_len(mrb, *dest, 0);
 }
 
@@ -1135,7 +1125,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, size_t *maxdest, int *level, 
 static VALUE
 blkenc_s_encode(MRB, VALUE self)
 {
-    VALUE src, dest, predict;
+    struct RString *src, *dest, *predict;
     size_t maxdest;
     int level;
     blkenc_s_encode_args(mrb, &src, &dest, &maxdest, &level, &predict);
@@ -1148,13 +1138,13 @@ blkenc_s_encode(MRB, VALUE self)
         traits = &block_encoder_traits.hc;
     }
 
-    int s;
     void *lz4 = mrb_malloc(mrb, traits->context_size);
     traits->reset_stream(lz4, level);
-    if (!NIL_P(predict)) {
-        s = traits->load_dict(lz4, RSTRING_PTR(predict), RSTRING_LEN(predict));
+    if (predict) {
+        traits->load_dict(lz4, RSTR_PTR(predict), RSTR_LEN(predict));
     }
-    s = traits->compress_continue(lz4, RSTRING_PTR(src), RSTRING_PTR(dest), RSTRING_LEN(src), maxdest, level);
+
+    int s = traits->compress_continue(lz4, RSTR_PTR(src), RSTR_PTR(dest), RSTR_LEN(src), maxdest, level);
     mrb_free(mrb, lz4);
     if (s <= 0) {
         mrb_raisef(mrb, E_RUNTIME_ERROR,
@@ -1164,7 +1154,7 @@ blkenc_s_encode(MRB, VALUE self)
     }
     mrbx_str_set_len(mrb, dest, s);
 
-    return dest;
+    return VALUE(dest);
 }
 
 static void
