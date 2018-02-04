@@ -1032,7 +1032,7 @@ blkenc_s_encode_args(MRB, VALUE *src, VALUE *dest, int *level, VALUE *predict)
     default:
         mrb_raisef(mrb,
                    E_ARGUMENT_ERROR,
-                   "wrong number of arguments (given %S, expect 1..4 + keywords)",
+                   "wrong number of arguments (given %S, expect 1..3 + keywords)",
                    mrb_fixnum_value(argc));
     }
 
