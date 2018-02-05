@@ -598,7 +598,7 @@ dec_s_decode_args(MRB, struct RString **src, struct RString **dest, ssize_t *max
 static void
 dec_s_decode_all(MRB, VALUE self, struct RString *src, struct RString *dest, LZ4F_dctx *lz4f)
 {
-    LZ4F_decompressOptions_t opts = { .stableDst = 1, };
+    LZ4F_decompressOptions_t opts = { .stableDst = 0, };
     size_t destoff = 0;
     size_t maxdest = 0;
 
