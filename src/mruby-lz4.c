@@ -56,7 +56,7 @@ aux_str_alloc(MRB, VALUE str, size_t size)
     return str;
 }
 
-static int
+static LZ4F_blockSizeID_t
 aux_lz4f_blocksizeid(MRB, VALUE size)
 {
     size_t n;
@@ -395,9 +395,9 @@ encoder_set_outbuf(MRB, VALUE obj, struct encoder *p, VALUE buf)
 static VALUE
 enc_s_new(MRB, VALUE self)
 {
-    struct RData *rd;
-    struct encoder *p;
-    Data_Make_Struct(mrb, mrb_class_ptr(self), struct encoder, &encoder_type, p, rd);
+    struct RData *rd = mrb_data_object_alloc(mrb, mrb_class_ptr(self), NULL, &encoder_type);
+    struct encoder *p = (struct encoder *)mrb_calloc(mrb, 1, sizeof(struct encoder));
+    rd->data = p;
     LZ4F_errorCode_t err = LZ4F_createCompressionContext(&p->lz4f, LZ4F_getVersion());
     aux_lz4f_check_error(mrb, err, "LZ4F_createCompressionContext");
     p->io = Qnil;
@@ -766,9 +766,9 @@ decoder_set_inbuf(MRB, VALUE obj, struct decoder *p, VALUE buf)
 static VALUE
 dec_s_new(MRB, VALUE self)
 {
-    struct RData *rd;
-    struct decoder *p;
-    Data_Make_Struct(mrb, mrb_class_ptr(self), struct decoder, &decoder_type, p, rd);
+    struct RData *rd = mrb_data_object_alloc(mrb, mrb_class_ptr(self), NULL, &decoder_type);
+    struct decoder *p = (struct decoder *)mrb_calloc(mrb, 1, sizeof(struct decoder));
+    rd->data = p;
 
     LZ4F_errorCode_t err = LZ4F_createDecompressionContext(&p->lz4f, LZ4F_VERSION);
     aux_lz4f_check_error(mrb, err, "LZ4F_createDecompressionContext");
@@ -1006,37 +1006,37 @@ blkenc_s_encode_size(MRB, VALUE self)
 static void
 aux_LZ4_resetStream(void *cx, int level)
 {
-    LZ4_resetStream(cx);
+    LZ4_resetStream((LZ4_stream_t *)cx);
 }
 
 static int
 aux_LZ4_loadDict(void *cx, const char *predict, size_t dictsize)
 {
-    return LZ4_loadDict(cx, predict, dictsize);
+    return LZ4_loadDict((LZ4_stream_t *)cx, predict, dictsize);
 }
 
 static int
 aux_LZ4_compress_fast_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
 {
-    return LZ4_compress_fast_continue(cx, src, dest, srcsize, destsize, -level);
+    return LZ4_compress_fast_continue((LZ4_stream_t *)cx, src, dest, srcsize, destsize, -level);
 }
 
 static void
 aux_LZ4_resetStreamHC(void *cx, int level)
 {
-    LZ4_resetStreamHC(cx, level);
+    LZ4_resetStreamHC((LZ4_streamHC_t *)cx, level);
 }
 
 static int
 aux_LZ4_loadDictHC(void *cx, const char *predict, size_t dictsize)
 {
-    return LZ4_loadDictHC(cx, predict, dictsize);
+    return LZ4_loadDictHC((LZ4_streamHC_t *)cx, predict, dictsize);
 }
 
 static int
 aux_LZ4_compress_HC_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
 {
-    return LZ4_compress_HC_continue(cx, src, dest, srcsize, destsize);
+    return LZ4_compress_HC_continue((LZ4_streamHC_t *)cx, src, dest, srcsize, destsize);
 }
 
 struct block_encoder_traits
