@@ -27,3 +27,18 @@ MRuby::Build.new("host-nan32") do |conf|
   gem core: "mruby-bin-mruby"
   gem "."
 end
+
+MRuby::Build.new("host32++") do |conf|
+  toolchain :clang
+
+  conf.build_dir = conf.name
+
+  enable_debug
+  enable_test
+  enable_cxx_abi
+
+  gem core: "mruby-print"
+  gem core: "mruby-bin-mrbc"
+  gem core: "mruby-bin-mruby"
+  gem "."
+end
