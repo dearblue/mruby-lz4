@@ -5,6 +5,8 @@
 #include <mruby/value.h>
 #include <mruby/data.h>
 #include <mruby/variable.h>
+#include <mruby/error.h>
+#include <mruby/throw.h>
 #include <lz4.h>
 #include <lz4hc.h>
 #include <lz4frame.h>
@@ -650,6 +652,28 @@ dec_s_decode_partial(MRB, VALUE self, struct RString *src, struct RString *dest,
     mrbx_str_set_len(mrb, dest, destsize);
 }
 
+struct dec_s_decode
+{
+    VALUE self;
+    struct RString *src, *dest;
+    ssize_t maxdest;
+    LZ4F_dctx *context;
+};
+
+static VALUE
+dec_s_decode_try(MRB, VALUE argv)
+{
+    struct dec_s_decode *p = (struct dec_s_decode *)mrb_cptr(argv);
+
+    if (p->maxdest < 0) {
+        dec_s_decode_all(mrb, p->self, p->src, p->dest, p->context);
+    } else {
+        dec_s_decode_partial(mrb, p->self, p->src, p->dest, p->maxdest, p->context);
+    }
+
+    return VALUE(p->dest);
+}
+
 /*
  * call-seq:
  *  decode(src, destsize = nil, dest = "") -> dest
@@ -657,28 +681,24 @@ dec_s_decode_partial(MRB, VALUE self, struct RString *src, struct RString *dest,
 static VALUE
 dec_s_decode(MRB, VALUE self)
 {
-    struct RString *src, *dest;
-    ssize_t maxdest;
-    dec_s_decode_args(mrb, &src, &dest, &maxdest);
-    LZ4F_dctx *context;
-    size_t s;
+    struct dec_s_decode args = { self, 0 };
 
-    s = LZ4F_createDecompressionContext(&context, LZ4F_VERSION);
+    dec_s_decode_args(mrb, &args.src, &args.dest, &args.maxdest);
+
+    size_t s = LZ4F_createDecompressionContext(&args.context, LZ4F_VERSION);
     aux_lz4f_check_error(mrb, s, "LZ4F_createDecompressionContext");
 
-    MRBX_ENTER(mrb);
-        if (maxdest < 0) {
-            dec_s_decode_all(mrb, self, src, dest, context);
-        } else {
-            dec_s_decode_partial(mrb, self, src, dest, maxdest, context);
-        }
-    MRBX_INERROR();
-        LZ4F_freeDecompressionContext(context);
-    MRBX_LEAVE();
+    mrb_bool raised;
+    VALUE result = mrb_protect(mrb, dec_s_decode_try, mrb_cptr_value(mrb, &args), &raised);
 
-    LZ4F_freeDecompressionContext(context);
+    LZ4F_freeDecompressionContext(args.context);
 
-    return VALUE(dest);
+    if (raised) {
+        mrb->exc = mrb_obj_ptr(result);
+        MRB_THROW(mrb->jmp);
+    }
+
+    return result;
 }
 
 struct decoder
