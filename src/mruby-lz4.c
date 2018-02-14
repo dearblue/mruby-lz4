@@ -977,32 +977,6 @@ init_decoder(MRB, struct RClass *mLZ4)
  * class LZ4::BlockEncoder
  */
 
-/*
- * call-seq:
- *  encode_size(src) -> unsigned integer (OR float)
- */
-static VALUE
-blkenc_s_encode_size(MRB, VALUE self)
-{
-    VALUE src;
-    mrb_get_args(mrb, "o", &src);
-    size_t size;
-    if (mrb_string_p(src)) {
-        size = RSTRING_LEN(src);
-    } else if (mrb_float_p(src)) {
-        size = CLAMP(mrb_float(src), 0, UINT32_MAX);
-    } else {
-        size = CLAMP(mrb_int(mrb, src), 0, UINT32_MAX);
-    }
-
-    size = LZ4_compressBound(size);
-    if (size > MRB_INT_MAX) {
-        return mrb_float_value(mrb, size);
-    } else {
-        return mrb_fixnum_value(size);
-    }
-}
-
 static void
 aux_LZ4_resetStream(void *cx, int level)
 {
@@ -1056,6 +1030,32 @@ static const struct
     { "LZ4_compress_fast_continue", sizeof(LZ4_stream_t), aux_LZ4_resetStream, aux_LZ4_loadDict, aux_LZ4_compress_fast_continue },
     { "LZ4_compress_HC_continue", sizeof(LZ4_streamHC_t), aux_LZ4_resetStreamHC, aux_LZ4_loadDictHC, aux_LZ4_compress_HC_continue },
 };
+
+/*
+ * call-seq:
+ *  encode_size(src) -> unsigned integer (OR float)
+ */
+static VALUE
+blkenc_s_encode_size(MRB, VALUE self)
+{
+    VALUE src;
+    mrb_get_args(mrb, "o", &src);
+    size_t size;
+    if (mrb_string_p(src)) {
+        size = RSTRING_LEN(src);
+    } else if (mrb_float_p(src)) {
+        size = CLAMP(mrb_float(src), 0, UINT32_MAX);
+    } else {
+        size = CLAMP(mrb_int(mrb, src), 0, UINT32_MAX);
+    }
+
+    size = LZ4_compressBound(size);
+    if (size > MRB_INT_MAX) {
+        return mrb_float_value(mrb, size);
+    } else {
+        return mrb_fixnum_value(size);
+    }
+}
 
 static void
 blkenc_s_encode_args(MRB, struct RString **src, struct RString **dest, size_t *maxdest, int *level, struct RString **predict)
