@@ -12,9 +12,18 @@
 #include <lz4frame.h>
 #include <mruby-aux.h>
 #include <mruby-aux/scanhash.h>
+#include <mruby-aux/string/drop.h>
 #include <string.h>
 
+#define LOGF(FORMAT, ...) do { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
+
 #define AUX_LZ4_DEFAULT_PARTIAL_SIZE ((uint32_t)256 << 10)
+
+#ifdef MRB_INT16
+#   define AUX_LZ4_PREFIX_MAX_CAPACITY  MRBX_STR_MAX
+#else
+#   define AUX_LZ4_PREFIX_MAX_CAPACITY  (65536L)
+#endif
 
 #define AUX_OR_DEFAULT(primary, secondary) (NIL_P(primary) ? (secondary) : (primary))
 #define CLAMP(n, min, max) (n < min ? min : (n > max ? max : n))
@@ -32,6 +41,22 @@
 
 #define id_initialize mrb_intern_lit(mrb, "initialize")
 #define id_read mrb_intern_lit(mrb, "read")
+
+/*
+ * mrb_str_cat は capa 目いっぱいまで埋めると倍々に拡張するので、その代わりの関数。
+ *
+ * capa 目一杯まで埋めても capa を維持する。
+ */
+static struct RString *
+aux_str_cat(MRB, struct RString *str, const char *buf, size_t len)
+{
+    mrb_int off = RSTR_LEN(str);
+    mrbx_str_reserve(mrb, str, off + len);
+    memcpy(RSTR_PTR(str) + off, buf, len);
+    RSTR_SET_LEN(str, off + len);
+
+    return str;
+}
 
 static inline VALUE
 aux_str_buf_new(MRB, size_t size)
@@ -54,6 +79,26 @@ aux_str_alloc(MRB, VALUE str, size_t size)
     mrbx_str_reserve(mrb, str, size);
 
     return str;
+}
+
+static mrb_int
+convert_to_lz4_level(MRB, VALUE level)
+{
+    if (NIL_P(level)) {
+        return -1;
+    } else {
+        return mrb_int(mrb, level);
+    }
+}
+
+static mrb_int
+convert_to_prefix_capacity(MRB, VALUE capa)
+{
+    if (NIL_P(capa)) {
+        return AUX_LZ4_PREFIX_MAX_CAPACITY;
+    } else {
+        return CLAMP(mrb_int(mrb, capa), 0, AUX_LZ4_PREFIX_MAX_CAPACITY);
+    }
 }
 
 static LZ4F_blockSizeID_t
@@ -990,6 +1035,12 @@ aux_LZ4_loadDict(void *cx, const char *predict, size_t dictsize)
 }
 
 static int
+aux_LZ4_saveDict(void *cx, char *predict, size_t dictsize)
+{
+    return LZ4_saveDict((LZ4_stream_t *)cx, predict, dictsize);
+}
+
+static int
 aux_LZ4_compress_fast_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
 {
     return LZ4_compress_fast_continue((LZ4_stream_t *)cx, src, dest, srcsize, destsize, -level);
@@ -1008,6 +1059,12 @@ aux_LZ4_loadDictHC(void *cx, const char *predict, size_t dictsize)
 }
 
 static int
+aux_LZ4_saveDictHC(void *cx, char *predict, size_t dictsize)
+{
+    return LZ4_saveDictHC((LZ4_streamHC_t *)cx, predict, dictsize);
+}
+
+static int
 aux_LZ4_compress_HC_continue(void *cx, const char *src, char *dest, size_t srcsize, size_t destsize, int level)
 {
     return LZ4_compress_HC_continue((LZ4_streamHC_t *)cx, src, dest, srcsize, destsize);
@@ -1019,6 +1076,7 @@ struct block_encoder_traits
     size_t context_size;
     void (*reset_stream)(void *, int);
     int (*load_dict)(void *, const char *, size_t);
+    int (*save_dict)(void *, char *, size_t);
     int (*compress_continue)(void *, const char *, char *, size_t, size_t, int);
 };
 
@@ -1027,9 +1085,237 @@ static const struct
     struct block_encoder_traits fast;
     struct block_encoder_traits hc;
 } block_encoder_traits = {
-    { "LZ4_compress_fast_continue", sizeof(LZ4_stream_t), aux_LZ4_resetStream, aux_LZ4_loadDict, aux_LZ4_compress_fast_continue },
-    { "LZ4_compress_HC_continue", sizeof(LZ4_streamHC_t), aux_LZ4_resetStreamHC, aux_LZ4_loadDictHC, aux_LZ4_compress_HC_continue },
+    { "LZ4_compress_fast_continue", sizeof(LZ4_stream_t), aux_LZ4_resetStream, aux_LZ4_loadDict, aux_LZ4_saveDict, aux_LZ4_compress_fast_continue },
+    { "LZ4_compress_HC_continue", sizeof(LZ4_streamHC_t), aux_LZ4_resetStreamHC, aux_LZ4_loadDictHC, aux_LZ4_saveDictHC, aux_LZ4_compress_HC_continue },
 };
+
+struct block_encoder
+{
+    const struct block_encoder_traits *traits;
+
+    int level;
+
+    char *prefix;
+    size_t prefix_length;
+    size_t prefix_capacity;
+
+    void *lz4;
+
+    /* 直後の連続した領域に prefix と lz4 が確保される */
+};
+
+static const mrb_data_type block_encoder_type = {
+    "LZ4::BlockEncoder@mruby-lz4",
+    mrb_free,
+};
+
+static struct block_encoder *
+get_block_encoder(MRB, VALUE self)
+{
+    struct block_encoder *p = (struct block_encoder *)mrb_data_get_ptr(mrb, self, &block_encoder_type);
+
+    if (!p) {
+        mrb_raisef(mrb, E_TYPE_ERROR,
+                   "wrong initialized - %S", self);
+    }
+
+    return p;
+}
+
+static void
+blkenc_initialize_args(MRB, const struct block_encoder_traits **traits, mrb_int *level, struct RString **predict, mrb_int *precapa)
+{
+    mrb_int argc;
+    VALUE *argv;
+
+    switch (mrb_get_args(mrb, "*", &argv, &argc)) {
+    case 0:
+        *level = convert_to_lz4_level(mrb, Qnil);
+        *predict = NULL;
+        *precapa = convert_to_prefix_capacity(mrb, Qnil);
+        break;
+    case 1:
+        *level = convert_to_lz4_level(mrb, argv[0]);
+        *predict = NULL;
+        *precapa = convert_to_prefix_capacity(mrb, Qnil);
+        break;
+    case 2:
+        *level = convert_to_lz4_level(mrb, argv[0]);
+        *predict = RString(argv[1]);
+        *precapa = convert_to_prefix_capacity(mrb, Qnil);
+        break;
+    case 3:
+        *level = convert_to_lz4_level(mrb, argv[0]);
+        *predict = RString(argv[1]);
+        *precapa = convert_to_prefix_capacity(mrb, argv[2]);
+        break;
+    default:
+        mrbx_error_arity(mrb, argc, 0, 3);
+    }
+
+    if (*level < 0) {
+        *traits = &block_encoder_traits.fast;
+    } else {
+        *traits = &block_encoder_traits.hc;
+    }
+
+    if (*predict && RSTR_LEN(*predict) > *precapa) {
+        mrb_raise(mrb, E_RUNTIME_ERROR,
+                  "predict を指定されたが、prefix_capacity が小さすぎる");
+    }
+}
+
+static VALUE
+blkenc_initialize(MRB, VALUE self)
+{
+    mrb_int level, precapa;
+    struct RString *predict;
+    const struct block_encoder_traits *traits;
+    blkenc_initialize_args(mrb, &traits, &level, &predict, &precapa);
+
+    if (DATA_PTR(self) || DATA_TYPE(self)) {
+        mrb_raisef(mrb, E_TYPE_ERROR,
+                   "already initialized - %S",
+                   self);
+    }
+
+    /* XXX: アライメントの考慮が必要なのかはわからない */
+    size_t size = sizeof(struct block_encoder) + traits->context_size + precapa;
+
+    struct block_encoder *p = (struct block_encoder *)mrb_malloc(mrb, size);
+
+    memset(p, 0, size);
+    p->traits = traits;
+    p->level = level;
+    p->lz4 = (void *)((char *)p + sizeof(*p));
+    p->prefix = (char *)p + traits->context_size;
+    p->prefix_capacity = precapa;
+
+    traits->reset_stream(p->lz4, level);
+
+    if (predict) {
+        traits->load_dict(p->lz4, RSTR_PTR(predict), RSTR_LEN(predict));
+        traits->save_dict(p->lz4, p->prefix, p->prefix_capacity);
+    }
+
+    mrb_data_init(self, p, &block_encoder_type);
+
+    return self;
+}
+
+static void
+blkenc_reset_args(MRB, VALUE self, struct block_encoder **p, mrb_int *level, struct RString **dict)
+{
+    VALUE *argv;
+    mrb_int argc;
+    mrb_get_args(mrb, "*", &argv, &argc);
+
+    *p = get_block_encoder(mrb, self);
+
+    switch (argc) {
+    case 0:
+        *level = (*p)->level;
+        *dict = NULL;
+        break;
+    case 1:
+        *level = (NIL_P(argv[0]) ? (*p)->level : mrb_int(mrb, argv[0]));
+        *dict = NULL;
+        break;
+    case 2:
+        *level = (NIL_P(argv[0]) ? (*p)->level : mrb_int(mrb, argv[0]));
+        *dict = RString(argv[1]);
+        break;
+    default:
+        mrbx_error_arity(mrb, argc, 0, 2);
+    }
+
+    if ((*level < 0 && (*p)->level >= 0) || (*level >= 0 && (*p)->level < 0)) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR,
+                  "wrong level (both encoder level and argument level are make up the number sign)");
+    }
+}
+
+static VALUE
+blkenc_reset(MRB, VALUE self)
+{
+    mrb_int level;
+    struct RString *dict;
+    struct block_encoder *p;
+    blkenc_reset_args(mrb, self, &p, &level, &dict);
+
+    p->traits->reset_stream(p->lz4, level);
+    p->level = level;
+
+    if (dict) {
+        p->traits->load_dict(p->lz4, RSTR_PTR(dict), RSTR_LEN(dict));
+        p->traits->save_dict(p->lz4, p->prefix, p->prefix_capacity);
+    }
+
+    return self;
+}
+
+static void
+blkenc_encode_args(MRB, VALUE self, struct block_encoder **p, char **srcp, mrb_int *srclen, mrb_int *maxdest, struct RString **dest)
+{
+    mrb_int argc;
+    VALUE *argv;
+    mrb_get_args(mrb, "s*", srcp, srclen, &argv, &argc);
+
+    switch (argc) {
+    case 0:
+        *maxdest = -1;
+        *dest = NULL;
+        break;
+    case 1:
+        *maxdest = (NIL_P(argv[0]) ? -1 : mrb_int(mrb, argv[0]));
+        *dest = NULL;
+        break;
+    case 2:
+        *maxdest = (NIL_P(argv[0]) ? -1 : mrb_int(mrb, argv[0]));
+        *dest = RString(argv[1]);
+        break;
+    default:
+        mrbx_error_arity(mrb, argc + 1, 1, 3);
+    }
+
+    if (*maxdest < 0) {
+        *maxdest = LZ4_compressBound(*srclen);
+    }
+
+    *dest = mrbx_str_force_recycle(mrb, *dest, *maxdest);
+
+    *p = get_block_encoder(mrb, self);
+}
+
+static VALUE
+blkenc_encode(MRB, VALUE self)
+{
+    char *srcp;
+    mrb_int srclen;
+    struct RString *dest;
+    mrb_int maxdest;
+    struct block_encoder *p;
+    blkenc_encode_args(mrb, self, &p, &srcp, &srclen, &maxdest, &dest);
+
+    int s = p->traits->compress_continue(p->lz4, srcp, RSTR_PTR(dest), srclen, maxdest, p->level);
+
+    if (s <= 0) {
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "%S failed (code:%S)",
+                   VALUE(p->traits->compress_continue_name),
+                   VALUE((mrb_int)s));
+    }
+    mrbx_str_set_len(mrb, dest, s);
+
+    if ((p->prefix_length = p->traits->save_dict(p->lz4, p->prefix, p->prefix_capacity)) == 0) {
+        /* NOTE: 保存に失敗したため、リンクを切る */
+        p->traits->load_dict(p->lz4, NULL, 0);
+    } else {
+        p->traits->load_dict(p->lz4, p->prefix, p->prefix_length);
+    }
+
+    return VALUE(dest);
+}
 
 /*
  * call-seq:
@@ -1184,6 +1470,11 @@ init_block_encoder(MRB, struct RClass *mLZ4)
     mrb_define_class_method(mrb, cBlockEncoder, "encode_size", blkenc_s_encode_size, MRB_ARGS_REQ(1));
     mrb_define_class_method(mrb, cBlockEncoder, "encode", blkenc_s_encode, MRB_ARGS_ANY());
 
+    MRB_SET_INSTANCE_TT(cBlockEncoder, MRB_TT_DATA);
+    mrb_define_method(mrb, cBlockEncoder, "initialize", blkenc_initialize, MRB_ARGS_ANY());
+    mrb_define_method(mrb, cBlockEncoder, "encode", blkenc_encode, MRB_ARGS_ANY());
+    mrb_define_method(mrb, cBlockEncoder, "reset", blkenc_reset, MRB_ARGS_ANY());
+
     mrb_define_const(mrb, cBlockEncoder, "LZ4HC_CLEVEL_MIN", mrb_fixnum_value(LZ4HC_CLEVEL_MIN));
     mrb_define_const(mrb, cBlockEncoder, "LZ4HC_CLEVEL_DEFAULT", mrb_fixnum_value(LZ4HC_CLEVEL_DEFAULT));
     mrb_define_const(mrb, cBlockEncoder, "LZ4HC_CLEVEL_OPT_MIN", mrb_fixnum_value(LZ4HC_CLEVEL_OPT_MIN));
@@ -1200,6 +1491,103 @@ init_block_encoder(MRB, struct RClass *mLZ4)
 /*
  * class LZ4::BlockDecoder
  */
+
+/*
+ * call-seq:
+ *  initialize(predict = nil, prefix_capacity = <AUX_LZ4_PREFIX_MAX_CAPACITY>)
+ */
+static VALUE
+blkdec_initialize(MRB, VALUE self)
+{
+    char *predictp = NULL;
+    mrb_int predictlen = 0;
+    mrb_int prefixcapa = AUX_LZ4_PREFIX_MAX_CAPACITY;
+    mrb_get_args(mrb, "|s!i", &predictp, &predictlen, &prefixcapa);
+
+    /* TODO: predictlen を AUX_LZ4_PREFIX_MAX_CAPACITY に切り詰める */
+
+    if (prefixcapa < 0) {
+        prefixcapa = AUX_LZ4_PREFIX_MAX_CAPACITY;
+    }
+
+    if (predictlen > prefixcapa) {
+        mrb_raisef(mrb, E_ARGUMENT_ERROR,
+                   "wrong predict length - prefix buffer overflow (predict length=%S, prefix capacity=%S)",
+                   VALUE(predictlen), VALUE(prefixcapa));
+    }
+
+    mrb_str_modify(mrb, RSTRING(self));
+    mrb_str_resize(mrb, self, prefixcapa);
+    RSTR_SET_LEN(RSTRING(self), 0);
+    aux_str_cat(mrb, RSTRING(self), predictp, predictlen);
+
+    return self;
+}
+
+/*
+ * call-seq:
+ *  decode(src, destmax = nil, dest = nil) -> dest or string
+ */
+static VALUE
+blkdec_decode(MRB, VALUE self)
+{
+    char *srcp;
+    mrb_int srclen;
+    mrb_int destmax = -1;
+    VALUE destv = Qnil;
+    mrb_get_args(mrb, "s!|iS!", &srcp, &srclen, &destmax, &destv);
+
+    if (destmax < 0) {
+        size_t size = aux_lz4_scan_size(mrb, srcp, srclen);
+        if (size > MRBX_STR_MAX) {
+            mrb_raise(mrb, E_RUNTIME_ERROR,
+                      "maybe out of memory for decompression data");
+        }
+
+        destmax = size;
+    }
+
+    struct RString *dest = mrbx_str_force_recycle(mrb, destv, destmax);
+    struct RString *selfp = RSTRING(self);
+
+    int destlen = LZ4_decompress_safe_usingDict(srcp, RSTR_PTR(dest), srclen, destmax, RSTR_PTR(selfp), RSTR_LEN(selfp));
+    if (destlen < 0) {
+        mrb_raisef(mrb, E_RUNTIME_ERROR, "LZ4_decompress_safe_usingDict failed (%S)", mrb_fixnum_value(destlen));
+    }
+    RSTR_SET_LEN(dest, destlen);
+
+    mrb_int selfcapa = RSTR_CAPA(selfp);
+//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
+    if (destlen >= selfcapa) {
+        RSTR_SET_LEN(selfp, 0);
+        //mrb_str_cat(mrb, self, RSTR_PTR(dest) + destlen - selfcapa, selfcapa);
+        aux_str_cat(mrb, selfp, RSTR_PTR(dest) + destlen - selfcapa, selfcapa);
+    } else {
+        mrb_int cutlen = RSTR_LEN(selfp) - (selfcapa - destlen);
+
+        if (cutlen > 0) {
+            mrbx_str_drop(mrb, selfp, 0, cutlen);
+//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
+        }
+
+        //mrb_str_cat(mrb, self, RSTR_PTR(dest), destlen);
+        aux_str_cat(mrb, selfp, RSTR_PTR(dest), destlen);
+    }
+
+//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
+
+    return VALUE(dest);
+}
+
+static VALUE
+blkdec_reset(MRB, VALUE self)
+{
+    mrb_get_args(mrb, "");
+
+    RSTR_SET_LEN(RSTRING(self), 0);
+
+    return self;
+}
 
 /*
  * call-seq:
@@ -1314,6 +1702,14 @@ init_block_decoder(MRB, struct RClass *mLZ4)
     struct RClass *cBlockDecoder = mrb_define_class_under(mrb, mLZ4, "BlockDecoder", mrb_cObject);
     mrb_define_class_method(mrb, cBlockDecoder, "decode_size", blkdec_s_decode_size, MRB_ARGS_REQ(1));
     mrb_define_class_method(mrb, cBlockDecoder, "decode", blkdec_s_decode, MRB_ARGS_ANY());
+
+    /*
+     * どうせ prefix (dictionary) バッファのみしか保持しないため、string で事足りる。
+     */
+    MRB_SET_INSTANCE_TT(cBlockDecoder, MRB_TT_STRING);
+    mrb_define_method(mrb, cBlockDecoder, "initialize", blkdec_initialize, MRB_ARGS_ANY());
+    mrb_define_method(mrb, cBlockDecoder, "decode", blkdec_decode, MRB_ARGS_ANY());
+    mrb_define_method(mrb, cBlockDecoder, "reset", blkdec_reset, MRB_ARGS_ANY());
 }
 
 /*
