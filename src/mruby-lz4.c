@@ -1557,24 +1557,18 @@ blkdec_decode(MRB, VALUE self)
     RSTR_SET_LEN(dest, destlen);
 
     mrb_int selfcapa = RSTR_CAPA(selfp);
-//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
     if (destlen >= selfcapa) {
         RSTR_SET_LEN(selfp, 0);
-        //mrb_str_cat(mrb, self, RSTR_PTR(dest) + destlen - selfcapa, selfcapa);
         aux_str_cat(mrb, selfp, RSTR_PTR(dest) + destlen - selfcapa, selfcapa);
     } else {
         mrb_int cutlen = RSTR_LEN(selfp) - (selfcapa - destlen);
 
         if (cutlen > 0) {
             mrbx_str_drop(mrb, selfp, 0, cutlen);
-//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
         }
 
-        //mrb_str_cat(mrb, self, RSTR_PTR(dest), destlen);
         aux_str_cat(mrb, selfp, RSTR_PTR(dest), destlen);
     }
-
-//LOGF("prefix.size=%d, prefix.capacity=%d", (int)RSTR_LEN(selfp), (int)RSTR_CAPA(selfp));
 
     return VALUE(dest);
 }
