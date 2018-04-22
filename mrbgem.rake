@@ -7,7 +7,6 @@ MRuby::Gem::Specification.new("mruby-lz4") do |s|
 
   add_dependency "mruby-string-ext", core: "mruby-string-ext"
   add_dependency "mruby-aux", github: "dearblue/mruby-aux"
-  add_dependency "mruby-aux-scanhash", github: "dearblue/mruby-aux-scanhash"
 
   if s.cc.command =~ /\b(?:g?cc|clang)\d*\b/
     s.cc.flags << "-Wall" <<
