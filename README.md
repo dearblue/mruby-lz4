@@ -1,18 +1,5 @@
 # mruby-lz4 : mruby bindings for lz4 the compression library (unofficial)
 
-  * Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
-  * Version: 0.2
-  * Product quality: PROTOTYPE
-  * Author: [dearblue](https://github.com/dearblue)
-  * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
-  * Licensing: BSD-2-Clause License
-  * Dependency external mrbgems: (NONE)
-  * Bundled C libraries (git-submodule'd):
-      * [lz4-1.8.1.2](https://github.com/lz4/lz4)
-        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.8.1.2/LICENSE)
-        by [Yann Collet](https://github.com/Cyan4973)
-
-
 mruby へ LZ4 圧縮ライブラリの機能を提供します。
 
   * LZ4 Frame データの圧縮・伸長が行なえます。
@@ -103,3 +90,21 @@ LZ4.decode(input) do |lz4|
   lz4.read(nil, buf)
 end
 ```
+
+
+## Specification
+
+  * Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
+  * Version: 0.3
+  * Product quality: PROTOTYPE
+  * Author: [dearblue](https://github.com/dearblue)
+  * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
+  * Licensing: BSD-2-Clause License
+  * Dependency external mrbgems:
+      * [mruby-aux](https://github.com/dearblue/mruby-aux)
+        under [Creative Commons Zero License \(CC0\)](https://github.com/dearblue/mruby-aux/blob/master/LICENSE)
+        by [dearblue](https://github.com/dearblue)
+  * Bundled C libraries (git-submodules):
+      * [lz4-1.8.1.2](https://github.com/lz4/lz4)
+        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.8.1.2/LICENSE)
+        by [Yann Collet](https://github.com/Cyan4973)
