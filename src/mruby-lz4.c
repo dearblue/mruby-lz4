@@ -6,7 +6,6 @@
 #include <mruby/data.h>
 #include <mruby/variable.h>
 #include <mruby/error.h>
-#include <mruby/throw.h>
 #include <lz4.h>
 #include <lz4hc.h>
 #include <lz4frame.h>
@@ -719,6 +718,16 @@ dec_s_decode_try(MRB, VALUE argv)
     return VALUE(p->dest);
 }
 
+static VALUE
+dec_s_decode_ensure(MRB, VALUE argv)
+{
+    struct dec_s_decode *p = (struct dec_s_decode *)mrb_cptr(argv);
+
+    LZ4F_freeDecompressionContext(p->context);
+
+    return Qnil;
+}
+
 /*
  * call-seq:
  *  decode(src, destsize = nil, dest = "") -> dest
@@ -733,17 +742,9 @@ dec_s_decode(MRB, VALUE self)
     size_t s = LZ4F_createDecompressionContext(&args.context, LZ4F_VERSION);
     aux_lz4f_check_error(mrb, s, "LZ4F_createDecompressionContext");
 
-    mrb_bool raised;
-    VALUE result = mrb_protect(mrb, dec_s_decode_try, mrb_cptr_value(mrb, &args), &raised);
-
-    LZ4F_freeDecompressionContext(args.context);
-
-    if (raised) {
-        mrb->exc = mrb_obj_ptr(result);
-        MRB_THROW(mrb->jmp);
-    }
-
-    return result;
+    return mrb_ensure(mrb,
+            dec_s_decode_try, mrb_cptr_value(mrb, &args),
+            dec_s_decode_ensure, mrb_cptr_value(mrb, &args));
 }
 
 struct decoder
