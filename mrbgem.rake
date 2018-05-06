@@ -8,6 +8,12 @@ MRuby::Gem::Specification.new("mruby-lz4") do |s|
   add_dependency "mruby-string-ext", core: "mruby-string-ext"
   add_dependency "mruby-aux", github: "dearblue/mruby-aux"
 
+  cc.defines << "UNLZ4_GRADUAL_NO_MALLOC=1"
+
+  if cc.defines.flatten.grep(/^WITHOUT_UNLZ4_GRADUAL(?:$|=)/).empty?
+    cc.include_paths << File.join(dir, "contrib/micro-co/include")
+  end
+
   if s.cc.command =~ /\b(?:g?cc|clang)\d*\b/
     s.cc.flags << "-Wall" <<
                   "-Wno-shift-negative-value" <<

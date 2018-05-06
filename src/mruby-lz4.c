@@ -12,6 +12,8 @@
 #include <mruby-aux.h>
 #include <mruby-aux/scanhash.h>
 #include <mruby-aux/string/drop.h>
+#include <mruby-aux/fakedin.h>
+#include "unlz4-gradual.h"
 #include <string.h>
 
 #define LOGF(FORMAT, ...) do { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
@@ -274,6 +276,34 @@ aux_lz4_scan_size(MRB, const void *p, size_t len)
 
     return 0;
 }
+
+#if !defined(MRB_INT16) || !defined(WITHOUT_UNLZ4_GRADUAL)
+static void
+common_read_args(MRB, intptr_t *size, struct RString **dest)
+{
+    VALUE asize = Qnil;
+    VALUE destv;
+    switch (mrb_get_args(mrb, "|oS!", &asize, &destv)) {
+    case 0:
+        *size = -1;
+        *dest = NULL;
+        break;
+    case 1:
+        *size = (NIL_P(asize) ? -1 : mrb_int(mrb, asize));
+        *dest = NULL;
+        break;
+    case 2:
+        *size = (NIL_P(asize) ? -1 : mrb_int(mrb, asize));
+        *dest = mrbx_str_ptr(mrb, destv);
+        break;
+    default:
+        AUX_NOT_REACHED_HERE;
+    }
+
+    *dest = mrbx_str_force_recycle(mrb, *dest, (*size < 0 ? AUX_LZ4_DEFAULT_PARTIAL_SIZE : *size));
+    mrbx_str_set_len(mrb, *dest, 0);
+}
+#endif
 
 #ifndef MRB_INT16
 
@@ -871,30 +901,6 @@ dec_initialize(MRB, VALUE self)
     return self;
 }
 
-static void
-common_read_args(MRB, intptr_t *size, VALUE *dest)
-{
-    VALUE asize = Qnil;
-    switch (mrb_get_args(mrb, "|oS!", &asize, dest)) {
-    case 0:
-        *size = -1;
-        *dest = Qnil;
-        break;
-    case 1:
-        *size = (NIL_P(asize) ? -1 : mrb_int(mrb, asize));
-        *dest = Qnil;
-        break;
-    case 2:
-        *size = (NIL_P(asize) ? -1 : mrb_int(mrb, asize));
-        break;
-    default:
-        AUX_NOT_REACHED_HERE;
-    }
-
-    *dest = VALUE(mrbx_str_force_recycle(mrb, *dest, (*size < 0 ? AUX_LZ4_DEFAULT_PARTIAL_SIZE : *size)));
-    mrbx_str_set_len(mrb, *dest, 0);
-}
-
 static int
 dec_read_fetch(MRB, VALUE self, struct decoder *p)
 {
@@ -924,13 +930,13 @@ dec_read(MRB, VALUE self)
 {
     struct decoder *p = getdecoder(mrb, self);
     intptr_t size;
-    VALUE dest;
+    struct RString *dest;
     common_read_args(mrb, &size, &dest);
-    if (size == 0) { return dest; }
+    if (size == 0) { return VALUE(dest); }
 
     int arena = mrb_gc_arena_save(mrb);
 
-    while (size < 0 || RSTRING_LEN(dest) < size) {
+    while (size < 0 || RSTR_LEN(dest) < size) {
         mrb_gc_arena_restore(mrb, arena);
 
         if (dec_read_fetch(mrb, self, p) < 0) {
@@ -939,25 +945,25 @@ dec_read(MRB, VALUE self)
 
         const char *srcp = RSTRING_PTR(p->inbuf) + p->inoff;
         size_t srcsize = RSTRING_LEN(p->inbuf) - p->inoff;
-        char *destp = RSTRING_PTR(dest) + RSTRING_LEN(dest);
-        size_t destsize = (size < 0 ? RSTRING_CAPA(dest) : size) - RSTRING_LEN(dest);
+        char *destp = RSTR_PTR(dest) + RSTR_LEN(dest);
+        size_t destsize = (size < 0 ? RSTR_CAPA(dest) : size) - RSTR_LEN(dest);
         size_t s = LZ4F_decompress(p->lz4f, destp, &destsize, srcp, &srcsize, NULL);
         p->inoff += srcsize;
-        RSTR_SET_LEN(RSTRING(dest), RSTRING_LEN(dest) + destsize);
+        RSTR_SET_LEN(dest, RSTR_LEN(dest) + destsize);
         aux_lz4f_check_error(mrb, s, "LZ4F_decompress");
-        if (s == 0 || RSTRING_LEN(dest) >= AUX_STR_MAX) {
+        if (s == 0 || RSTR_LEN(dest) >= AUX_STR_MAX) {
             break;
         }
 
-        if (size < 0 && RSTRING_LEN(dest) >= RSTRING_CAPA(dest)) {
-            size_t capa = RSTRING_CAPA(dest) + AUX_LZ4_DEFAULT_PARTIAL_SIZE;
+        if (size < 0 && RSTR_LEN(dest) >= RSTR_CAPA(dest)) {
+            size_t capa = RSTR_CAPA(dest) + AUX_LZ4_DEFAULT_PARTIAL_SIZE;
             capa = MIN(capa, AUX_STR_MAX);
             mrbx_str_reserve(mrb, dest, capa);
         }
     }
 
-    if (RSTRING_LEN(dest) > 0) {
-        return dest;
+    if (RSTR_LEN(dest) > 0) {
+        return VALUE(dest);
     } else {
         return Qnil;
     }
@@ -1691,6 +1697,169 @@ blkdec_s_decode(MRB, VALUE self)
     return dest;
 }
 
+#ifndef WITHOUT_UNLZ4_GRADUAL
+#include "unlz4-gradual.h"
+
+#ifdef MRB_INT16
+# define AUX_PARTIAL_READ_SIZE (4 << 10) /* 4 KiB */
+#else
+# define AUX_PARTIAL_READ_SIZE (16 << 10) /* 16 KiB */
+#endif
+
+static void
+aux_unlz4_gradual_check_error(MRB, enum unlz4_gradual_status status, const char mesg[])
+{
+    if (status > UNLZ4_GRADUAL_OK) {
+        if (mesg) {
+            mrb_raisef(mrb, E_RUNTIME_ERROR,
+                       "failed %S - %S (%S)",
+                       VALUE(mesg),
+                       VALUE(unlz4_gradual_str_status(status)),
+                       VALUE((mrb_int)status));
+        } else {
+            mrb_raisef(mrb, E_RUNTIME_ERROR,
+                       "unlz4-gradual error - %S (%S)",
+                       VALUE(unlz4_gradual_str_status(status)),
+                       VALUE((mrb_int)status));
+        }
+    }
+}
+
+struct unlz4g
+{
+    struct unlz4_gradual *unlz4;
+    struct mrbx_fakedin inport;
+    enum unlz4_gradual_status status;
+};
+
+static void
+unlz4g_free(MRB, struct unlz4g *g)
+{
+    if (g) {
+        mrb_free(mrb, g->unlz4);
+        mrb_free(mrb, g);
+    }
+}
+
+static const mrb_data_type unlz4g_type = {
+    .struct_name = "unlz4-gradual@mruby-lz4",
+    .dfree = (void (*)(mrb_state *, void *))unlz4g_free,
+};
+
+static void
+unlz4g_initialize_args(MRB, VALUE self, VALUE *inport, uint32_t *prefix_capacity, struct RString **predict)
+{
+    mrb_int argc;
+    VALUE *argv;
+    mrb_get_args(mrb, "*", &argv, &argc);
+
+    VALUE opts;
+    if (argc > 0 && mrb_obj_is_kind_of(mrb, argv[argc - 1], mrb->hash_class)) {
+        opts = argv[-- argc];
+    } else {
+        opts = Qnil;
+    }
+
+    switch (argc) {
+    case 1:
+        *inport = argv[0];
+        *prefix_capacity = 65536;
+        break;
+    case 2:
+        *inport = argv[0];
+        *prefix_capacity = mrb_int(mrb, argv[1]);
+        break;
+    default:
+        mrbx_error_arity(mrb, argc, 1, 2);
+    }
+
+    VALUE predictv;
+    MRBX_SCANHASH(mrb, opts, Qnil,
+            MRBX_SCANHASH_ARGS("predict", &predictv, Qnil));
+
+    *predict = mrbx_str_ptr(mrb, predictv);
+}
+
+/*
+ * call-seq:
+ *  initialize(inport, prefix_capacity = 65536, predict: nil)
+ */
+static VALUE
+unlz4g_initialize(MRB, VALUE self)
+{
+    VALUE inport;
+    uint32_t prefix_capacity;
+    struct RString *predict;
+    unlz4g_initialize_args(mrb, self, &inport, &prefix_capacity, &predict);
+
+    if (mrb_data_check_get_ptr(mrb, self, &unlz4g_type)) {
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "wrong initialized again - %S",
+                   mrb_any_to_s(mrb, self));
+    }
+
+    struct RData *da = RDATA(self);
+    da->type = &unlz4g_type;
+    struct unlz4g *g = (struct unlz4g *)(da->data = mrb_malloc(mrb, sizeof(struct unlz4g)));
+    memset(g, 0, sizeof(*g));
+    enum unlz4_gradual_status s = unlz4_gradual_alloc(&g->unlz4, prefix_capacity, (void *(*)(void *, size_t))mrb_malloc, mrb);
+    aux_unlz4_gradual_check_error(mrb, s, "unlz4_gradual_alloc");
+    if (predict) {
+        s = unlz4_gradual_reset(g->unlz4, RSTR_PTR(predict), RSTR_LEN(predict));
+        aux_unlz4_gradual_check_error(mrb, s, "unlz4_gradual_reset");
+    }
+    mrbx_fakedin_setup(mrb, self, &g->inport, inport);
+
+    return self;
+}
+
+static VALUE
+unlz4g_read(MRB, VALUE self)
+{
+    struct RString *dest;
+    ssize_t maxdest;
+    common_read_args(mrb, &maxdest, &dest);
+    struct unlz4g *g = (struct unlz4g *)mrbx_getref(mrb, self, &unlz4g_type);
+    if (maxdest < 0) { mrb_raise(mrb, E_NOTIMP_ERROR, "!"); }
+
+    g->unlz4->next_out = RSTR_PTR(dest);
+    g->unlz4->avail_out = maxdest;
+
+    while (g->unlz4->avail_out > 0) {
+        if (g->status == UNLZ4_GRADUAL_NEED_INPUT) {
+            g->unlz4->avail_in = mrbx_fakedin_read(mrb, self, &g->inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
+
+            if (g->unlz4->avail_in < 0) {
+                mrb_raise(mrb, E_RUNTIME_ERROR, "unexpected end of stream");
+            }
+        } else if (g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
+            g->unlz4->avail_in = mrbx_fakedin_read(mrb, self, &g->inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
+
+            if (g->unlz4->avail_in < 0) {
+                break;
+            }
+        }
+
+        g->status = unlz4_gradual(g->unlz4);
+        if (g->status > UNLZ4_GRADUAL_OK) {
+            aux_unlz4_gradual_check_error(mrb, g->status, "unlz4_gradual");
+        }
+    }
+
+    mrbx_str_set_len(mrb, dest, maxdest - g->unlz4->avail_out);
+
+    return (RSTR_LEN(dest) > 0 ? VALUE(dest) : Qnil);
+}
+
+//unlz4g_close
+
+static VALUE
+unlz4g_eof(MRB, VALUE self)
+{
+    return mrb_bool_value(((struct unlz4g *)mrbx_getref(mrb, self, &unlz4g_type))->status == UNLZ4_GRADUAL_MAYBE_FINISHED);
+}
+#endif /* WITHOUT_UNLZ4_GRADUAL */
+
 static void
 init_block_decoder(MRB, struct RClass *mLZ4)
 {
@@ -1705,6 +1874,15 @@ init_block_decoder(MRB, struct RClass *mLZ4)
     mrb_define_method(mrb, cBlockDecoder, "initialize", blkdec_initialize, MRB_ARGS_ANY());
     mrb_define_method(mrb, cBlockDecoder, "decode", blkdec_decode, MRB_ARGS_ANY());
     mrb_define_method(mrb, cBlockDecoder, "reset", blkdec_reset, MRB_ARGS_ANY());
+
+#ifndef WITHOUT_UNLZ4_GRADUAL
+    struct RClass *cUnLZ4Gradual = mrb_define_class_under(mrb, cBlockDecoder, "Gradual", mrb_cObject);
+    MRB_SET_INSTANCE_TT(cUnLZ4Gradual, MRB_TT_DATA);
+    mrb_define_method(mrb, cUnLZ4Gradual, "initialize", unlz4g_initialize, MRB_ARGS_ANY());
+    mrb_define_method(mrb, cUnLZ4Gradual, "read", unlz4g_read, MRB_ARGS_ANY());
+    //mrb_define_method(mrb, cUnLZ4Gradual, "close", unlz4g_close, MRB_ARGS_NONE());
+    mrb_define_method(mrb, cUnLZ4Gradual, "maybe_eof", unlz4g_eof, MRB_ARGS_NONE());
+#endif /* WITHOUT_UNLZ4_GRADUAL */
 }
 
 /*

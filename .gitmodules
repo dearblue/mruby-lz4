@@ -1,3 +1,6 @@
 [submodule "contrib/lz4"]
 	path = contrib/lz4
 	url = https://github.com/lz4/lz4.git
+[submodule "contrib/micro-co"]
+	path = contrib/micro-co
+	url = https://github.com/dearblue/micro-co.git
