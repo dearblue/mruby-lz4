@@ -383,7 +383,7 @@ unlz4_gradual_reset(struct unlz4_gradual *g, const void *prefix, int32_t prefixl
 
     int32_t preflen = p->prefix_length;
     int32_t prefcapa = p->prefix_capacity;
-    memset(&p->co_state, 0, sizeof(struct unlz4_gradual_real) - sizeof(struct unlz4_gradual));
+    memset(&p->co_state, 0, offsetof(struct unlz4_gradual_real, prefix) - offsetof(struct unlz4_gradual_real, co_state));
     p->co_state = CO_INIT;
     p->prefix_length = preflen;
     p->prefix_capacity = prefcapa;
