@@ -13,7 +13,6 @@
 #include <mruby-aux/scanhash.h>
 #include <mruby-aux/string/drop.h>
 #include <mruby-aux/fakedin.h>
-#include "unlz4-gradual.h"
 #include <string.h>
 
 #define LOGF(FORMAT, ...) do { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)

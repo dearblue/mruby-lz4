@@ -12,6 +12,8 @@ MRuby::Gem::Specification.new("mruby-lz4") do |s|
 
   if cc.defines.flatten.grep(/^WITHOUT_UNLZ4_GRADUAL(?:$|=)/).empty?
     cc.include_paths << File.join(dir, "contrib/micro-co/include")
+  else
+    objs.reject! { |o| o.include?("/mruby-lz4/src/unlz4-gradual.o") }
   end
 
   if s.cc.command =~ /\b(?:g?cc|clang)\d*\b/
