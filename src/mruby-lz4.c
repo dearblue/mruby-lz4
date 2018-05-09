@@ -1825,17 +1825,16 @@ unlz4g_read(MRB, VALUE self)
     g->unlz4->avail_out = maxdest;
 
     while (g->unlz4->avail_out > 0) {
-        if (g->status == UNLZ4_GRADUAL_NEED_INPUT) {
+        if (g->status == UNLZ4_GRADUAL_NEED_INPUT ||
+                g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
             g->unlz4->avail_in = mrbx_fakedin_read(mrb, self, &g->inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
 
             if (g->unlz4->avail_in < 0) {
-                mrb_raise(mrb, E_RUNTIME_ERROR, "unexpected end of stream");
-            }
-        } else if (g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
-            g->unlz4->avail_in = mrbx_fakedin_read(mrb, self, &g->inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
-
-            if (g->unlz4->avail_in < 0) {
-                break;
+                if (g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
+                    break;
+                } else {
+                    mrb_raise(mrb, E_RUNTIME_ERROR, "unexpected end of stream");
+                }
             }
         }
 
