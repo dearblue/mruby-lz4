@@ -99,12 +99,12 @@ end
   * Product quality: PROTOTYPE
   * Author: [dearblue](https://github.com/dearblue)
   * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
-  * Licensing: BSD-2-Clause License
+  * Licensing: [2 clause BSD License](LICENSE)
   * Dependency external mrbgems:
       * [mruby-aux](https://github.com/dearblue/mruby-aux)
         under [Creative Commons Zero License \(CC0\)](https://github.com/dearblue/mruby-aux/blob/master/LICENSE)
         by [dearblue](https://github.com/dearblue)
   * Bundled C libraries (git-submodules):
-      * [lz4-1.8.1.2](https://github.com/lz4/lz4)
-        under [BSD-2-Clause License](https://github.com/lz4/lz4/blob/v1.8.1.2/LICENSE)
+      * [lz4](https://github.com/lz4/lz4)-[1.8.2](https://github.com/lz4/lz4/tree/v1.8.2)
+        under [2 clause BSD License](https://github.com/lz4/lz4/blob/v1.8.2/LICENSE)
         by [Yann Collet](https://github.com/Cyan4973)
