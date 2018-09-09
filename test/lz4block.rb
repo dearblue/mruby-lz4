@@ -1,6 +1,6 @@
 #!ruby
 
-is_mrb16 = (1 << 16).kind_of?(Float)
+is_mrb16 = (1 << 24).kind_of?(Float)
 
 az104 = "abcdefghijklmnopqrstuvwxyz" * 4
 

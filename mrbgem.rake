@@ -1,12 +1,24 @@
 MRuby::Gem::Specification.new("mruby-lz4") do |s|
   s.summary = "mruby bindings for lz4 the compression library (unofficial)"
-  s.version = "0.3"
+  s.version = File.read(File.join(File.dirname(__FILE__), "README.md")).scan(/^\s*[\-\*] version:\s*(\d+(?:\.\d+)+)/i).flatten[-1]
   s.license = "BSD-2-Clause"
   s.author  = "dearblue"
   s.homepage = "https://github.com/dearblue/mruby-lz4"
 
   add_dependency "mruby-string-ext", core: "mruby-string-ext"
   add_dependency "mruby-aux", github: "dearblue/mruby-aux"
+
+  if File.exist?(File.join(MRUBY_ROOT, "mrbgems/mruby-metaprog"))
+    add_test_dependency "mruby-metaprog", core: "mruby-metaprog"
+  end
+
+  cc.defines << "UNLZ4_GRADUAL_NO_MALLOC=1"
+
+  if cc.defines.flatten.grep(/^WITHOUT_UNLZ4_GRADUAL(?:$|=)/).empty?
+    cc.include_paths << File.join(dir, "contrib/micro-co/include")
+  else
+    objs.reject! { |o| o.include?("/mruby-lz4/src/unlz4-gradual.o") }
+  end
 
   if s.cc.command =~ /\b(?:g?cc|clang)\d*\b/
     s.cc.flags << "-Wall" <<
