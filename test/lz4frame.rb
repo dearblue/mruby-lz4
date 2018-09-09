@@ -1,20 +1,14 @@
 #!ruby
 
-assert("LZ4 Frame API - one step processing (simply)") do
-  unless (1 << 28).kind_of?(Integer)
-    skip "[mruby is build with MRB_INT16]"
-  end
+if LZ4.const_defined? :Encoder
 
+assert("LZ4 Frame API - one step processing (simply)") do
   s = "123456789" * 1111
   assert_equal s, LZ4::Decoder.decode(LZ4::Encoder.encode(s))
   assert_equal s, LZ4.decode(LZ4.encode(s))
 end
 
 assert("LZ4 Frame API - one step processing (with arguments)") do
-  unless (1 << 28).kind_of?(Integer)
-    skip "[mruby is build with MRB_INT16]"
-  end
-
   s = "123456789" * 1111
   assert_equal s, LZ4::Decoder.decode(LZ4::Encoder.encode(s, level: 9))
   assert_equal s, LZ4.decode(LZ4.encode(s, level: 9))
@@ -23,10 +17,6 @@ assert("LZ4 Frame API - one step processing (with arguments)") do
 end
 
 assert("LZ4 Frame API - stream processing") do
-  unless (1 << 28).kind_of?(Integer)
-    skip "[mruby is build with MRB_INT16]"
-  end
-
   s = "123456789" * 111 + "ABCDEFG"
   d = ""
   LZ4::Encoder.wrap(d) do |lz4|
@@ -49,11 +39,7 @@ assert("LZ4 Frame API - stream processing") do
 end
 
 assert("LZ4 Frame API - stream processing (huge)") do
-  unless (1 << 28).kind_of?(Integer)
-    skip "[mruby is build with MRB_INT16]"
-  end
-
-  s = "123456789" * 11111111 + "ABCDEFG"
+  s = "123456789" * 1111111 + "ABCDEFG"
   d = ""
   LZ4::Encoder.wrap(d, level: 1) do |lz4|
     off = 0
@@ -80,3 +66,5 @@ assert("LZ4 Frame API - stream processing (huge)") do
     assert_equal nil.hash, lz4.read(slicesize).hash
   end
 end
+
+end # LZ4::Encoder defined

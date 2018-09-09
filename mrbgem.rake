@@ -8,6 +8,10 @@ MRuby::Gem::Specification.new("mruby-lz4") do |s|
   add_dependency "mruby-string-ext", core: "mruby-string-ext"
   add_dependency "mruby-aux", github: "dearblue/mruby-aux"
 
+  if File.exist?(File.join(MRUBY_ROOT, "mrbgems/mruby-metaprog"))
+    add_test_dependency "mruby-metaprog", core: "mruby-metaprog"
+  end
+
   cc.defines << "UNLZ4_GRADUAL_NO_MALLOC=1"
 
   if cc.defines.flatten.grep(/^WITHOUT_UNLZ4_GRADUAL(?:$|=)/).empty?
