@@ -14,6 +14,7 @@
 #include <mruby-aux/string/drop.h>
 #include <mruby-aux/fakedin.h>
 #include <string.h>
+#include <sys/types.h> /* for ssize_t */
 
 #define LOGF(FORMAT, ...) do { fprintf(stderr, "%s:%d:%s: " FORMAT "\n", __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
 
