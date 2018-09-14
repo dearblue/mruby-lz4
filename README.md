@@ -10,7 +10,7 @@ mruby へ LZ4 圧縮ライブラリの機能を提供します。
 
     LZ4::BlockEncoder / LZ4::BlockDecoder
 
-## ***注意***
+## ****注意***
 
   * LZ4 Frame API は ``MRB_INT16`` が定義された場合利用できません。
 
@@ -105,6 +105,6 @@ end
         under [Creative Commons Zero License \(CC0\)](https://github.com/dearblue/mruby-aux/blob/master/LICENSE)
         by [dearblue](https://github.com/dearblue)
   * Bundled C libraries (git-submodules):
-      * [lz4](https://github.com/lz4/lz4)-[1.8.2](https://github.com/lz4/lz4/tree/v1.8.2)
-        under [2 clause BSD License](https://github.com/lz4/lz4/blob/v1.8.2/LICENSE)
+      * [lz4](https://github.com/lz4/lz4)-[1.8.3](https://github.com/lz4/lz4/tree/v1.8.3)
+        under [2 clause BSD License](https://github.com/lz4/lz4/blob/v1.8.3/LICENSE)
         by [Yann Collet](https://github.com/Cyan4973)
