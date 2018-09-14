@@ -21,8 +21,7 @@ MRuby::Gem::Specification.new("mruby-lz4") do |s|
   end
 
   if s.cc.command =~ /\b(?:g?cc|clang)\d*\b/
-    s.cc.flags << "-Wall" <<
-                  "-Wno-shift-negative-value" <<
+    s.cc.flags << "-Wno-shift-negative-value" <<
                   "-Wno-shift-count-negative" <<
                   "-Wno-shift-count-overflow" <<
                   "-Wno-missing-braces"
