@@ -42,6 +42,7 @@
 
 #define id_initialize mrb_intern_lit(mrb, "initialize")
 #define id_read mrb_intern_lit(mrb, "read")
+#define id_ivar_inport mrb_intern_lit(mrb, "inport@mruby-lz4")
 
 /*
  * mrb_str_cat は capa 目いっぱいまで埋めると倍々に拡張するので、その代わりの関数。
@@ -1728,7 +1729,6 @@ aux_unlz4_gradual_check_error(MRB, enum unlz4_gradual_status status, const char 
 struct unlz4g
 {
     struct unlz4_gradual *unlz4;
-    struct mrbx_fakedin inport;
     enum unlz4_gradual_status status;
 };
 
@@ -1808,7 +1808,7 @@ unlz4g_initialize(MRB, VALUE self)
         s = unlz4_gradual_reset(g->unlz4, RSTR_PTR(predict), RSTR_LEN(predict));
         aux_unlz4_gradual_check_error(mrb, s, "unlz4_gradual_reset");
     }
-    mrbx_fakedin_setup(mrb, self, &g->inport, inport);
+    mrb_iv_set(mrb, self, id_ivar_inport, mrbx_fakedin_new(mrb, inport));
 
     return self;
 }
@@ -1820,6 +1820,7 @@ unlz4g_read(MRB, VALUE self)
     ssize_t maxdest;
     common_read_args(mrb, &maxdest, &dest);
     struct unlz4g *g = (struct unlz4g *)mrbx_getref(mrb, self, &unlz4g_type);
+    VALUE inport = mrb_iv_get(mrb, self, id_ivar_inport);
     if (maxdest < 0) { mrb_raise(mrb, E_NOTIMP_ERROR, "!"); }
 
     g->unlz4->next_out = RSTR_PTR(dest);
@@ -1828,7 +1829,7 @@ unlz4g_read(MRB, VALUE self)
     while (g->unlz4->avail_out > 0) {
         if (g->status == UNLZ4_GRADUAL_NEED_INPUT ||
                 g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
-            g->unlz4->avail_in = mrbx_fakedin_read(mrb, self, &g->inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
+            g->unlz4->avail_in = mrbx_fakedin_read(mrb, inport, &g->unlz4->next_in, AUX_PARTIAL_READ_SIZE);
 
             if (g->unlz4->avail_in < 0) {
                 if (g->status == UNLZ4_GRADUAL_MAYBE_FINISHED) {
