@@ -20,11 +20,7 @@
 
 #define AUX_LZ4_DEFAULT_PARTIAL_SIZE ((uint32_t)256 << 10)
 
-#ifdef MRB_INT16
-#   define AUX_LZ4_PREFIX_MAX_CAPACITY  MRBX_STR_MAX
-#else
-#   define AUX_LZ4_PREFIX_MAX_CAPACITY  (65536L)
-#endif
+#define AUX_LZ4_PREFIX_MAX_CAPACITY  (65536L)
 
 #define AUX_OR_DEFAULT(primary, secondary) (NIL_P(primary) ? (secondary) : (primary))
 #define CLAMP(n, min, max) (n < min ? min : (n > max ? max : n))
@@ -69,10 +65,6 @@ aux_str_buf_new(MRB, size_t size)
 static inline VALUE
 aux_str_alloc(MRB, VALUE str, size_t size)
 {
-    if (size > AUX_STR_MAX) {
-        mrb_raise(mrb, E_RUNTIME_ERROR,
-                  "limitation memory allocate by mruby with build ``MRB_INT16''");
-    }
     if (NIL_P(str) || MRB_FROZEN_P(RSTRING(str))) {
         str = aux_str_buf_new(mrb, size);
     } else {
@@ -278,7 +270,7 @@ aux_lz4_scan_size(MRB, const void *p, size_t len)
     return 0;
 }
 
-#if !defined(MRB_INT16) || !defined(WITHOUT_UNLZ4_GRADUAL)
+#if !defined(WITHOUT_UNLZ4_GRADUAL)
 static void
 common_read_args(MRB, intptr_t *size, struct RString **dest)
 {
@@ -305,8 +297,6 @@ common_read_args(MRB, intptr_t *size, struct RString **dest)
     mrbx_str_set_len(mrb, *dest, 0);
 }
 #endif
-
-#ifndef MRB_INT16
 
 /*
  * class LZ4::Encoder
@@ -1024,8 +1014,6 @@ init_decoder(MRB, struct RClass *mLZ4)
     mrb_define_alias(mrb, cDecoder, "eof?", "eof");
 }
 
-#endif /* MRB_INT16 */
-
 /*
  * class LZ4::BlockEncoder
  */
@@ -1701,11 +1689,7 @@ blkdec_s_decode(MRB, VALUE self)
 #ifndef WITHOUT_UNLZ4_GRADUAL
 #include "unlz4-gradual.h"
 
-#ifdef MRB_INT16
-# define AUX_PARTIAL_READ_SIZE (4 << 10) /* 4 KiB */
-#else
-# define AUX_PARTIAL_READ_SIZE (16 << 10) /* 16 KiB */
-#endif
+#define AUX_PARTIAL_READ_SIZE (16 << 10) /* 16 KiB */
 
 static void
 aux_unlz4_gradual_check_error(MRB, enum unlz4_gradual_status status, const char mesg[])
@@ -1895,11 +1879,8 @@ mrb_mruby_lz4_gem_init(MRB)
 {
     struct RClass *mLZ4 = mrb_define_module(mrb, "LZ4");
 
-#ifndef MRB_INT16
     init_encoder(mrb, mLZ4);
     init_decoder(mrb, mLZ4);
-#endif
-
     init_block_encoder(mrb, mLZ4);
     init_block_decoder(mrb, mLZ4);
 }

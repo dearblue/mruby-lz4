@@ -1,7 +1,5 @@
 #!ruby
 
-is_mrb16 = (1 << 24).kind_of?(Float)
-
 az104 = "abcdefghijklmnopqrstuvwxyz" * 4
 
 # "abcdefghijklmnopqrstuvwxyz" の巡回文字列104バイトを LZ4 ブロックフォーマットで圧縮したデータ。
@@ -90,11 +88,9 @@ assert "streaming LZ4 Block decode" do
   assert_equal az104, lz4.decode(az104_lz4)
   assert_equal az104, lz4.decode(az104_lz4_linked)
 
-  unless is_mrb16
-    tmp = "abcdefghijklmnopqrstuvwxyz" * (8346199 / 26)
-    tmp << tmp.slice(0, 8346199 - tmp.bytesize)
-    assert_equal tmp.hash, lz4.decode(lz4.decode(lz4.decode(az8346199_lz4_lz4_lz4))).hash
-  end
+  tmp = "abcdefghijklmnopqrstuvwxyz" * (8346199 / 26)
+  tmp << tmp.slice(0, 8346199 - tmp.bytesize)
+  assert_equal tmp.hash, lz4.decode(lz4.decode(lz4.decode(az8346199_lz4_lz4_lz4))).hash
 end
 
 assert "streaming LZ4 Block encode" do
