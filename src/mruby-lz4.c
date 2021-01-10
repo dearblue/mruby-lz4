@@ -40,6 +40,17 @@
 #define id_read mrb_intern_lit(mrb, "read")
 #define id_ivar_inport mrb_intern_lit(mrb, "inport@mruby-lz4")
 
+static mrb_value
+aux_int_value(MRB, mrb_int num)
+{
+#if MRUBY_RELEASE_NO < 30000
+  (void)mrb;
+  return mrb_fixnum_value(num);
+#else
+  return mrb_int_value(mrb, num);
+#endif
+}
+
 /*
  * mrb_str_cat は capa 目いっぱいまで埋めると倍々に拡張するので、その代わりの関数。
  *
@@ -56,27 +67,27 @@ aux_str_cat(MRB, struct RString *str, const char *buf, size_t len)
   return str;
 }
 
-static inline VALUE
+static inline mrb_value
 aux_str_buf_new(MRB, size_t size)
 {
   return mrb_str_buf_new(mrb, MIN(size, AUX_STR_MAX));
 }
 
-static inline VALUE
-aux_str_alloc(MRB, VALUE str, size_t size)
+static inline mrb_value
+aux_str_alloc(MRB, mrb_value str, size_t size)
 {
   if (NIL_P(str) || MRB_FROZEN_P(RSTRING(str))) {
     str = aux_str_buf_new(mrb, size);
   } else {
     mrb_str_modify(mrb, RSTRING(str));
   }
-  mrbx_str_reserve(mrb, str, size);
+  mrbx_str_reserve(mrb, mrbx_str_ptr(mrb, str), size);
 
   return str;
 }
 
 static mrb_int
-convert_to_lz4_level(MRB, VALUE level)
+convert_to_lz4_level(MRB, mrb_value level)
 {
   if (NIL_P(level)) {
     return -1;
@@ -86,7 +97,7 @@ convert_to_lz4_level(MRB, VALUE level)
 }
 
 static mrb_int
-convert_to_prefix_capacity(MRB, VALUE capa)
+convert_to_prefix_capacity(MRB, mrb_value capa)
 {
   if (NIL_P(capa)) {
     return AUX_LZ4_PREFIX_MAX_CAPACITY;
@@ -96,7 +107,7 @@ convert_to_prefix_capacity(MRB, VALUE capa)
 }
 
 static LZ4F_blockSizeID_t
-aux_lz4f_blocksizeid(MRB, VALUE size)
+aux_lz4f_blocksizeid(MRB, mrb_value size)
 {
   size_t n;
   if (NIL_P(size)) {
@@ -121,7 +132,7 @@ aux_lz4f_blocksizeid(MRB, VALUE size)
 }
 
 static mrb_int
-aux_lz4f_compression_level(MRB, VALUE level)
+aux_lz4f_compression_level(MRB, mrb_value level)
 {
   if (NIL_P(level)) {
     return 0;
@@ -131,7 +142,7 @@ aux_lz4f_compression_level(MRB, VALUE level)
 }
 
 static uint32_t
-aux_to_u32(MRB, VALUE size)
+aux_to_u32(MRB, mrb_value size)
 {
   if (NIL_P(size)) {
     return 0;
@@ -147,7 +158,7 @@ aux_to_u32(MRB, VALUE size)
 }
 
 static uint64_t
-aux_to_u64(MRB, VALUE size)
+aux_to_u64(MRB, mrb_value size)
 {
   if (NIL_P(size)) {
     return 0;
@@ -163,7 +174,7 @@ aux_to_u64(MRB, VALUE size)
 }
 
 static size_t
-aux_to_sizet(MRB, VALUE size)
+aux_to_sizet(MRB, mrb_value size)
 {
   if (NIL_P(size)) {
     return 0;
@@ -274,8 +285,8 @@ aux_lz4_scan_size(MRB, const void *p, size_t len)
 static void
 common_read_args(MRB, intptr_t *size, struct RString **dest)
 {
-  VALUE asize = Qnil;
-  VALUE destv;
+  mrb_value asize = Qnil;
+  mrb_value destv;
   switch (mrb_get_args(mrb, "|oS!", &asize, &destv)) {
   case 0:
     *size = -1;
@@ -303,9 +314,9 @@ common_read_args(MRB, intptr_t *size, struct RString **dest)
  */
 
 static LZ4F_preferences_t
-aux_lz4f_encode_args(MRB, VALUE opts)
+aux_lz4f_encode_args(MRB, mrb_value opts)
 {
-  VALUE level, blocksize, blocklink, checksum, size;
+  mrb_value level, blocksize, blocklink, checksum, size;
   MRBX_SCANHASH(mrb, opts, Qnil,
                 MRBX_SCANHASH_ARGS("level", &level, Qnil),
                 MRBX_SCANHASH_ARGS("blocksize", &blocksize, Qnil),
@@ -327,10 +338,10 @@ aux_lz4f_encode_args(MRB, VALUE opts)
 }
 
 static void
-enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
+enc_s_encode_args(MRB, mrb_value *src, mrb_value *dest, LZ4F_preferences_t *prefs)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
   mrb_int argc0 = argc;
   if (argc > 0 && mrb_hash_p(argv[argc - 1])) {
@@ -380,8 +391,8 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
     *dest = aux_str_buf_new(mrb, maxsize);
   } else {
     mrb_check_type(mrb, *dest, MRB_TT_STRING);
-    mrbx_str_reserve(mrb, *dest, maxsize);
-    mrbx_str_set_len(mrb, *dest, 0);
+    mrbx_str_reserve(mrb, mrbx_str_ptr(mrb, *dest), maxsize);
+    mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, *dest), 0);
   }
 }
 
@@ -390,10 +401,10 @@ enc_s_encode_args(MRB, VALUE *src, VALUE *dest, LZ4F_preferences_t *prefs)
  *  encode(src, maxsize = nil, destbuf = "", prefs = {})
  *  encode(src, destbuf, prefs = {})
  */
-static VALUE
-enc_s_encode(MRB, VALUE self)
+static mrb_value
+enc_s_encode(MRB, mrb_value self)
 {
-  VALUE src, dest;
+  mrb_value src, dest;
   LZ4F_preferences_t prefs;
   enc_s_encode_args(mrb, &src, &dest, &prefs);
 
@@ -401,7 +412,7 @@ enc_s_encode(MRB, VALUE self)
                                 RSTRING_PTR(src), RSTRING_LEN(src),
                                 &prefs);
   aux_lz4f_check_error(mrb, s, "LZ4F_compressFrame");
-  mrbx_str_set_len(mrb, dest, s);
+  mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, dest), s);
   return dest;
 }
 
@@ -409,8 +420,8 @@ struct encoder
 {
   LZ4F_cctx *lz4f;
   LZ4F_preferences_t prefs;
-  VALUE io;
-  VALUE outbuf;
+  mrb_value io;
+  mrb_value outbuf;
   size_t outbufsize;
 };
 
@@ -430,23 +441,23 @@ static const mrb_data_type encoder_type = {
 };
 
 static struct encoder *
-getencoder(MRB, VALUE self)
+getencoder(MRB, mrb_value self)
 {
   struct encoder *p;
   Data_Get_Struct(mrb, self, &encoder_type, p);
   return p;
 }
 
-static VALUE
-encoder_set_outport(MRB, VALUE self, struct encoder *p, VALUE port)
+static mrb_value
+encoder_set_outport(MRB, mrb_value self, struct encoder *p, mrb_value port)
 {
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "mruby-lz4.outport"), port);
   p->io = port;
   return port;
 }
 
-static VALUE
-encoder_set_outbuf(MRB, VALUE obj, struct encoder *p, VALUE buf)
+static mrb_value
+encoder_set_outbuf(MRB, mrb_value obj, struct encoder *p, mrb_value buf)
 {
   p->outbuf = buf;
   mrb_iv_set(mrb, obj, mrb_intern_lit(mrb, "mruby-lz4.outbuf"), buf);
@@ -457,8 +468,8 @@ encoder_set_outbuf(MRB, VALUE obj, struct encoder *p, VALUE buf)
  * call-seq:
  *  new(outport, prefs = {})
  */
-static VALUE
-enc_s_new(MRB, VALUE self)
+static mrb_value
+enc_s_new(MRB, mrb_value self)
 {
   struct RData *rd = mrb_data_object_alloc(mrb, mrb_class_ptr(self), NULL, &encoder_type);
   struct encoder *p = (struct encoder *)mrb_calloc(mrb, 1, sizeof(struct encoder));
@@ -469,7 +480,7 @@ enc_s_new(MRB, VALUE self)
   p->outbuf = Qnil;
   p->outbufsize = MIN(256 << 10, AUX_STR_MAX); /* AUX_STR_MAX or 256 KiB */
 
-  VALUE obj = mrb_obj_value(rd);
+  mrb_value obj = mrb_obj_value(rd);
   mrb_int argc;
   mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
@@ -479,10 +490,10 @@ enc_s_new(MRB, VALUE self)
 }
 
 static void
-enc_initialize_args(MRB, VALUE *outport, LZ4F_preferences_t *prefs)
+enc_initialize_args(MRB, mrb_value *outport, LZ4F_preferences_t *prefs)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
   if (argc > 0 && mrb_hash_p(argv[argc - 1])) {
     *prefs = aux_lz4f_encode_args(mrb, argv[argc - 1]);
@@ -502,8 +513,8 @@ enc_initialize_args(MRB, VALUE *outport, LZ4F_preferences_t *prefs)
   }
 }
 
-static VALUE
-enc_initialize(MRB, VALUE self)
+static mrb_value
+enc_initialize(MRB, mrb_value self)
 {
   struct encoder *p = getencoder(mrb, self);
   enc_initialize_args(mrb, &p->io, &p->prefs);
@@ -512,8 +523,8 @@ enc_initialize(MRB, VALUE self)
   encoder_set_outbuf(mrb, self, p, aux_str_buf_new(mrb, p->outbufsize));
   size_t s = LZ4F_compressBegin(p->lz4f, RSTRING_PTR(p->outbuf), RSTRING_CAPA(p->outbuf), &p->prefs);
   aux_lz4f_check_error(mrb, s, "LZ4F_compressBegin");
-  mrbx_str_set_len(mrb, p->outbuf, s);
-  FUNCALL(mrb, p->io, "<<", p->outbuf);
+  mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, p->outbuf), s);
+  FUNCALL(mrb, p->io, mrb_intern_lit(mrb, "<<"), p->outbuf);
 
   return self;
 }
@@ -522,8 +533,8 @@ enc_initialize(MRB, VALUE self)
  * call-seq:
  *  write(src) -> self
  */
-static VALUE
-enc_write(MRB, VALUE self)
+static mrb_value
+enc_write(MRB, mrb_value self)
 {
   struct encoder *p = getencoder(mrb, self);
   const char *src;
@@ -539,8 +550,8 @@ enc_write(MRB, VALUE self)
     char *dest = RSTRING_PTR(p->outbuf);
     size_t s = LZ4F_compressUpdate(p->lz4f, dest, outsize, src, insize, &opts);
     aux_lz4f_check_error(mrb, s, "LZ4F_compressUpdate");
-    mrbx_str_set_len(mrb, p->outbuf, s);
-    FUNCALL(mrb, p->io, "<<", p->outbuf);
+    mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, p->outbuf), s);
+    FUNCALL(mrb, p->io, mrb_intern_lit(mrb, "<<"), p->outbuf);
     src += insize;
     srclen -= insize;
   }
@@ -552,8 +563,8 @@ enc_write(MRB, VALUE self)
  * call-seq:
  *  flush -> self
  */
-static VALUE
-enc_flush(MRB, VALUE self)
+static mrb_value
+enc_flush(MRB, mrb_value self)
 {
   struct encoder *p = getencoder(mrb, self);
   const LZ4F_compressOptions_t opts = { .stableSrc = 0, };
@@ -564,8 +575,8 @@ enc_flush(MRB, VALUE self)
   char *dest = RSTRING_PTR(p->outbuf);
   size_t s = LZ4F_flush(p->lz4f, dest, outsize, &opts);
   aux_lz4f_check_error(mrb, s, "LZ4F_flush");
-  mrbx_str_set_len(mrb, p->outbuf, s);
-  FUNCALL(mrb, p->io, "<<", p->outbuf);
+  mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, p->outbuf), s);
+  FUNCALL(mrb, p->io, mrb_intern_lit(mrb, "<<"), p->outbuf);
 
   return self;
 }
@@ -574,8 +585,8 @@ enc_flush(MRB, VALUE self)
  * call-seq:
  *  close -> self
  */
-static VALUE
-enc_close(MRB, VALUE self)
+static mrb_value
+enc_close(MRB, mrb_value self)
 {
   struct encoder *p = getencoder(mrb, self);
   const LZ4F_compressOptions_t opts = { .stableSrc = 0, };
@@ -586,8 +597,8 @@ enc_close(MRB, VALUE self)
   char *dest = RSTRING_PTR(p->outbuf);
   size_t s = LZ4F_compressEnd(p->lz4f, dest, outsize, &opts);
   aux_lz4f_check_error(mrb, s, "LZ4F_compressEnd");
-  mrbx_str_set_len(mrb, p->outbuf, s);
-  FUNCALL(mrb, p->io, "<<", p->outbuf);
+  mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, p->outbuf), s);
+  FUNCALL(mrb, p->io, mrb_intern_lit(mrb, "<<"), p->outbuf);
 
   return self;
 }
@@ -596,8 +607,8 @@ enc_close(MRB, VALUE self)
  * call-seq:
  *  port -> outport
  */
-static VALUE
-enc_get_port(MRB, VALUE self)
+static mrb_value
+enc_get_port(MRB, mrb_value self)
 {
   return getencoder(mrb, self)->io;
 }
@@ -625,7 +636,7 @@ init_encoder(MRB, struct RClass *mLZ4)
 static void
 dec_s_decode_args(MRB, struct RString **src, struct RString **dest, ssize_t *maxdest)
 {
-  VALUE *argv;
+  mrb_value *argv;
   mrb_int argc;
   mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -663,7 +674,7 @@ dec_s_decode_args(MRB, struct RString **src, struct RString **dest, ssize_t *max
 }
 
 static void
-dec_s_decode_all(MRB, VALUE self, struct RString *src, struct RString *dest, LZ4F_dctx *lz4f)
+dec_s_decode_all(MRB, mrb_value self, struct RString *src, struct RString *dest, LZ4F_dctx *lz4f)
 {
   LZ4F_decompressOptions_t opts = { .stableDst = 0, };
   size_t destoff = 0;
@@ -698,7 +709,7 @@ dec_s_decode_all(MRB, VALUE self, struct RString *src, struct RString *dest, LZ4
 }
 
 static void
-dec_s_decode_partial(MRB, VALUE self, struct RString *src, struct RString *dest, size_t maxdest, LZ4F_dctx *lz4f)
+dec_s_decode_partial(MRB, mrb_value self, struct RString *src, struct RString *dest, size_t maxdest, LZ4F_dctx *lz4f)
 {
   LZ4F_decompressOptions_t opts = { .stableDst = 1, };
 
@@ -719,14 +730,14 @@ dec_s_decode_partial(MRB, VALUE self, struct RString *src, struct RString *dest,
 
 struct dec_s_decode
 {
-  VALUE self;
+  mrb_value self;
   struct RString *src, *dest;
   ssize_t maxdest;
   LZ4F_dctx *context;
 };
 
-static VALUE
-dec_s_decode_try(MRB, VALUE argv)
+static mrb_value
+dec_s_decode_try(MRB, mrb_value argv)
 {
   struct dec_s_decode *p = (struct dec_s_decode *)mrb_cptr(argv);
 
@@ -736,11 +747,11 @@ dec_s_decode_try(MRB, VALUE argv)
     dec_s_decode_partial(mrb, p->self, p->src, p->dest, p->maxdest, p->context);
   }
 
-  return VALUE(p->dest);
+  return mrb_obj_value(p->dest);
 }
 
-static VALUE
-dec_s_decode_ensure(MRB, VALUE argv)
+static mrb_value
+dec_s_decode_ensure(MRB, mrb_value argv)
 {
   struct dec_s_decode *p = (struct dec_s_decode *)mrb_cptr(argv);
 
@@ -753,8 +764,8 @@ dec_s_decode_ensure(MRB, VALUE argv)
  * call-seq:
  *  decode(src, destsize = nil, dest = "") -> dest
  */
-static VALUE
-dec_s_decode(MRB, VALUE self)
+static mrb_value
+dec_s_decode(MRB, mrb_value self)
 {
   struct dec_s_decode args = { self, 0 };
 
@@ -771,9 +782,9 @@ dec_s_decode(MRB, VALUE self)
 struct decoder
 {
   LZ4F_dctx *lz4f;
-  VALUE predict;
-  VALUE inport;
-  VALUE inbuf;
+  mrb_value predict;
+  mrb_value inport;
+  mrb_value inbuf;
   mrb_int inoff;
   mrb_int inbufsize;
 };
@@ -794,31 +805,31 @@ static const mrb_data_type decoder_type = {
 };
 
 static struct decoder *
-getdecoder(MRB, VALUE self)
+getdecoder(MRB, mrb_value self)
 {
   struct decoder *p;
   Data_Get_Struct(mrb, self, &decoder_type, p);
   return p;
 }
 
-static VALUE
-decoder_set_predict(MRB, VALUE self, struct decoder *p, VALUE predict)
+static mrb_value
+decoder_set_predict(MRB, mrb_value self, struct decoder *p, mrb_value predict)
 {
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "mruby-lz4.predict"), predict);
   p->predict = predict;
   return predict;
 }
 
-static VALUE
-decoder_set_inport(MRB, VALUE self, struct decoder *p, VALUE port)
+static mrb_value
+decoder_set_inport(MRB, mrb_value self, struct decoder *p, mrb_value port)
 {
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "mruby-lz4.inport"), port);
   p->inport = port;
   return port;
 }
 
-static VALUE
-decoder_set_inbuf(MRB, VALUE obj, struct decoder *p, VALUE buf)
+static mrb_value
+decoder_set_inbuf(MRB, mrb_value obj, struct decoder *p, mrb_value buf)
 {
   p->inbuf = buf;
   mrb_iv_set(mrb, obj, mrb_intern_lit(mrb, "mruby-lz4.inbuf"), buf);
@@ -830,8 +841,8 @@ decoder_set_inbuf(MRB, VALUE obj, struct decoder *p, VALUE buf)
  * call-seq:
  *  new(inport)
  */
-static VALUE
-dec_s_new(MRB, VALUE self)
+static mrb_value
+dec_s_new(MRB, mrb_value self)
 {
   struct RData *rd = mrb_data_object_alloc(mrb, mrb_class_ptr(self), NULL, &decoder_type);
   struct decoder *p = (struct decoder *)mrb_calloc(mrb, 1, sizeof(struct decoder));
@@ -844,7 +855,7 @@ dec_s_new(MRB, VALUE self)
   p->inbufsize = MIN(1 << 20, AUX_STR_MAX); /* AUX_STR_MAX or 1 MiB */
 
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
   mrb_funcall_argv(mrb, mrb_obj_value(rd), id_initialize, argc, argv);
 
@@ -861,11 +872,11 @@ dec_s_new(MRB, VALUE self)
  *
  *      decompress with dictionary.
  */
-static VALUE
-dec_initialize(MRB, VALUE self)
+static mrb_value
+dec_initialize(MRB, mrb_value self)
 {
   struct decoder *p = getdecoder(mrb, self);
-  VALUE port, predict, opts;
+  mrb_value port, predict, opts;
   switch (mrb_get_args(mrb, "o|H", &port, &opts)) {
   case 1:
     predict = Qnil;
@@ -893,12 +904,12 @@ dec_initialize(MRB, VALUE self)
 }
 
 static int
-dec_read_fetch(MRB, VALUE self, struct decoder *p)
+dec_read_fetch(MRB, mrb_value self, struct decoder *p)
 {
   if (p->inoff >= RSTRING_LEN(p->inbuf)) {
     if (p->inbufsize < 1) { p->inbufsize = 0; return -1; }
 
-    VALUE v = FUNCALL(mrb, p->inport, "read", mrb_fixnum_value(p->inbufsize), p->inbuf);
+    mrb_value v = FUNCALL(mrb, p->inport, mrb_intern_lit(mrb, "read"), mrb_fixnum_value(p->inbufsize), p->inbuf);
     if (NIL_P(v)) { p->inbufsize = 0; return -1; }
     mrb_check_type(mrb, v, MRB_TT_STRING);
     if (RSTRING_LEN(v) < 1) { p->inbufsize = 0; return -1; }
@@ -916,14 +927,14 @@ dec_read_fetch(MRB, VALUE self, struct decoder *p)
  * call-seq:
  *  read(size = nil, dest = "") -> dest
  */
-static VALUE
-dec_read(MRB, VALUE self)
+static mrb_value
+dec_read(MRB, mrb_value self)
 {
   struct decoder *p = getdecoder(mrb, self);
   intptr_t size;
   struct RString *dest;
   common_read_args(mrb, &size, &dest);
-  if (size == 0) { return VALUE(dest); }
+  if (size == 0) { return mrb_obj_value(dest); }
 
   int arena = mrb_gc_arena_save(mrb);
 
@@ -954,7 +965,7 @@ dec_read(MRB, VALUE self)
   }
 
   if (RSTR_LEN(dest) > 0) {
-    return VALUE(dest);
+    return mrb_obj_value(dest);
   } else {
     return Qnil;
   }
@@ -964,8 +975,8 @@ dec_read(MRB, VALUE self)
  * call-seq:
  *  close -> nil
  */
-static VALUE
-dec_close(MRB, VALUE self)
+static mrb_value
+dec_close(MRB, mrb_value self)
 {
   getdecoder(mrb, self)->inbufsize = 0;
 
@@ -976,8 +987,8 @@ dec_close(MRB, VALUE self)
  * call-seq:
  *  eof -> true OR false
  */
-static VALUE
-dec_eof(MRB, VALUE self)
+static mrb_value
+dec_eof(MRB, mrb_value self)
 {
   if (getdecoder(mrb, self)->inbufsize > 0) {
     return Qfalse;
@@ -990,8 +1001,8 @@ dec_eof(MRB, VALUE self)
  * call-seq:
  *  port -> inport
  */
-static VALUE
-dec_get_port(MRB, VALUE self)
+static mrb_value
+dec_get_port(MRB, mrb_value self)
 {
   return getdecoder(mrb, self)->inport;
 }
@@ -1106,7 +1117,7 @@ static const mrb_data_type block_encoder_type = {
 };
 
 static struct block_encoder *
-get_block_encoder(MRB, VALUE self)
+get_block_encoder(MRB, mrb_value self)
 {
   struct block_encoder *p = (struct block_encoder *)mrb_data_get_ptr(mrb, self, &block_encoder_type);
 
@@ -1122,7 +1133,7 @@ static void
 blkenc_initialize_args(MRB, const struct block_encoder_traits **traits, mrb_int *level, struct RString **predict, mrb_int *precapa)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
 
   switch (mrb_get_args(mrb, "*", &argv, &argc)) {
   case 0:
@@ -1161,8 +1172,8 @@ blkenc_initialize_args(MRB, const struct block_encoder_traits **traits, mrb_int 
   }
 }
 
-static VALUE
-blkenc_initialize(MRB, VALUE self)
+static mrb_value
+blkenc_initialize(MRB, mrb_value self)
 {
   mrb_int level, precapa;
   struct RString *predict;
@@ -1200,9 +1211,9 @@ blkenc_initialize(MRB, VALUE self)
 }
 
 static void
-blkenc_reset_args(MRB, VALUE self, struct block_encoder **p, mrb_int *level, struct RString **dict)
+blkenc_reset_args(MRB, mrb_value self, struct block_encoder **p, mrb_int *level, struct RString **dict)
 {
-  VALUE *argv;
+  mrb_value *argv;
   mrb_int argc;
   mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -1231,8 +1242,8 @@ blkenc_reset_args(MRB, VALUE self, struct block_encoder **p, mrb_int *level, str
   }
 }
 
-static VALUE
-blkenc_reset(MRB, VALUE self)
+static mrb_value
+blkenc_reset(MRB, mrb_value self)
 {
   mrb_int level;
   struct RString *dict;
@@ -1251,10 +1262,10 @@ blkenc_reset(MRB, VALUE self)
 }
 
 static void
-blkenc_encode_args(MRB, VALUE self, struct block_encoder **p, char **srcp, mrb_int *srclen, mrb_int *maxdest, struct RString **dest)
+blkenc_encode_args(MRB, mrb_value self, struct block_encoder **p, char **srcp, mrb_int *srclen, mrb_int *maxdest, struct RString **dest)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "s*", srcp, srclen, &argv, &argc);
 
   switch (argc) {
@@ -1283,8 +1294,8 @@ blkenc_encode_args(MRB, VALUE self, struct block_encoder **p, char **srcp, mrb_i
   *p = get_block_encoder(mrb, self);
 }
 
-static VALUE
-blkenc_encode(MRB, VALUE self)
+static mrb_value
+blkenc_encode(MRB, mrb_value self)
 {
   char *srcp;
   mrb_int srclen;
@@ -1298,8 +1309,8 @@ blkenc_encode(MRB, VALUE self)
   if (s <= 0) {
     mrb_raisef(mrb, E_RUNTIME_ERROR,
                "%S failed (code:%S)",
-               VALUE(p->traits->compress_continue_name),
-               VALUE((mrb_int)s));
+               mrb_str_new_cstr(mrb, p->traits->compress_continue_name),
+               aux_int_value(mrb, s));
   }
   mrbx_str_set_len(mrb, dest, s);
 
@@ -1310,17 +1321,17 @@ blkenc_encode(MRB, VALUE self)
     p->traits->load_dict(p->lz4, p->prefix, p->prefix_length);
   }
 
-  return VALUE(dest);
+  return mrb_obj_value(dest);
 }
 
 /*
  * call-seq:
  *  encode_size(src) -> unsigned integer (OR float)
  */
-static VALUE
-blkenc_s_encode_size(MRB, VALUE self)
+static mrb_value
+blkenc_s_encode_size(MRB, mrb_value self)
 {
-  VALUE src;
+  mrb_value src;
   mrb_get_args(mrb, "o", &src);
   size_t size;
   if (mrb_string_p(src)) {
@@ -1343,10 +1354,10 @@ static void
 blkenc_s_encode_args(MRB, struct RString **src, struct RString **dest, size_t *maxdest, int *level, struct RString **predict)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
   if (argc > 0 && mrb_hash_p(argv[argc - 1])) {
-    VALUE alevel, apredict;
+    mrb_value alevel, apredict;
     MRBX_SCANHASH(mrb, argv[argc - 1], Qnil,
                   MRBX_SCANHASH_ARGS("level", &alevel, Qnil),
                   MRBX_SCANHASH_ARGS("predict", &apredict, Qnil));
@@ -1424,8 +1435,8 @@ blkenc_s_encode_args(MRB, struct RString **src, struct RString **dest, size_t *m
  *
  *      compression with dictionary
  */
-static VALUE
-blkenc_s_encode(MRB, VALUE self)
+static mrb_value
+blkenc_s_encode(MRB, mrb_value self)
 {
   struct RString *src, *dest, *predict;
   size_t maxdest;
@@ -1451,12 +1462,12 @@ blkenc_s_encode(MRB, VALUE self)
   if (s <= 0) {
     mrb_raisef(mrb, E_RUNTIME_ERROR,
                "%S failed (code:%S)",
-               VALUE(traits->compress_continue_name),
-               VALUE((mrb_int)s));
+               mrb_str_new_cstr(mrb, traits->compress_continue_name),
+               aux_int_value(mrb, s));
   }
   mrbx_str_set_len(mrb, dest, s);
 
-  return VALUE(dest);
+  return mrb_obj_value(dest);
 }
 
 static void
@@ -1492,8 +1503,8 @@ init_block_encoder(MRB, struct RClass *mLZ4)
  * call-seq:
  *  initialize(predict = nil, prefix_capacity = <AUX_LZ4_PREFIX_MAX_CAPACITY>)
  */
-static VALUE
-blkdec_initialize(MRB, VALUE self)
+static mrb_value
+blkdec_initialize(MRB, mrb_value self)
 {
   char *predictp = NULL;
   mrb_int predictlen = 0;
@@ -1509,7 +1520,7 @@ blkdec_initialize(MRB, VALUE self)
   if (predictlen > prefixcapa) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR,
                "wrong predict length - prefix buffer overflow (predict length=%S, prefix capacity=%S)",
-               VALUE(predictlen), VALUE(prefixcapa));
+               aux_int_value(mrb, predictlen), aux_int_value(mrb, prefixcapa));
   }
 
   mrb_str_modify(mrb, RSTRING(self));
@@ -1524,13 +1535,13 @@ blkdec_initialize(MRB, VALUE self)
  * call-seq:
  *  decode(src, destmax = nil, dest = nil) -> dest or string
  */
-static VALUE
-blkdec_decode(MRB, VALUE self)
+static mrb_value
+blkdec_decode(MRB, mrb_value self)
 {
   char *srcp;
   mrb_int srclen;
   mrb_int destmax = -1;
-  VALUE destv = Qnil;
+  mrb_value destv = Qnil;
   mrb_get_args(mrb, "s!|iS!", &srcp, &srclen, &destmax, &destv);
 
   if (destmax < 0) {
@@ -1543,7 +1554,7 @@ blkdec_decode(MRB, VALUE self)
     destmax = size;
   }
 
-  struct RString *dest = mrbx_str_force_recycle(mrb, destv, destmax);
+  struct RString *dest = mrbx_str_force_recycle(mrb, mrbx_str_ptr(mrb, destv), destmax);
   struct RString *selfp = RSTRING(self);
 
   int destlen = LZ4_decompress_safe_usingDict(srcp, RSTR_PTR(dest), srclen, destmax, RSTR_PTR(selfp), RSTR_LEN(selfp));
@@ -1566,11 +1577,11 @@ blkdec_decode(MRB, VALUE self)
     aux_str_cat(mrb, selfp, RSTR_PTR(dest), destlen);
   }
 
-  return VALUE(dest);
+  return mrb_obj_value(dest);
 }
 
-static VALUE
-blkdec_reset(MRB, VALUE self)
+static mrb_value
+blkdec_reset(MRB, mrb_value self)
 {
   mrb_get_args(mrb, "");
 
@@ -1583,10 +1594,10 @@ blkdec_reset(MRB, VALUE self)
  * call-seq:
  *  decode_size(src) -> unsigned integer (OR float)
  */
-static VALUE
-blkdec_s_decode_size(MRB, VALUE self)
+static mrb_value
+blkdec_s_decode_size(MRB, mrb_value self)
 {
-  VALUE src;
+  mrb_value src;
   mrb_get_args(mrb, "S", &src);
 
   uint32_t size = aux_lz4_scan_size(mrb, RSTRING_PTR(src), RSTRING_LEN(src));
@@ -1598,10 +1609,10 @@ blkdec_s_decode_size(MRB, VALUE self)
 }
 
 static void
-blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
+blkdec_s_decode_args(MRB, mrb_value *src, mrb_value *dest, mrb_value *predict)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
   if (argc > 0 && mrb_hash_p(argv[argc - 1])) {
     MRBX_SCANHASH(mrb, argv[argc - 1], Qnil,
@@ -1653,7 +1664,7 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
   } else {
     mrb_check_type(mrb, *dest, MRB_TT_STRING);
   }
-  mrbx_str_reserve(mrb, *dest, maxdest);
+  mrbx_str_reserve(mrb, mrbx_str_ptr(mrb, *dest), maxdest);
 }
 
 /*
@@ -1664,10 +1675,10 @@ blkdec_s_decode_args(MRB, VALUE *src, VALUE *dest, VALUE *predict)
  * [opts (hash)]
  *  predict (string OR nil):: decompression with dictionary
  */
-static VALUE
-blkdec_s_decode(MRB, VALUE self)
+static mrb_value
+blkdec_s_decode(MRB, mrb_value self)
 {
-  VALUE src, dest, predict;
+  mrb_value src, dest, predict;
   blkdec_s_decode_args(mrb, &src, &dest, &predict);
 
   LZ4_streamDecode_t *lz4 = (LZ4_streamDecode_t *)mrb_calloc(mrb, 1, sizeof(LZ4_streamDecode_t));
@@ -1681,7 +1692,7 @@ blkdec_s_decode(MRB, VALUE self)
   if (s < 0) {
     mrb_raise(mrb, E_RUNTIME_ERROR, "LZ4_decompress_safe_continue failed");
   }
-  mrbx_str_set_len(mrb, dest, s);
+  mrbx_str_set_len(mrb, mrbx_str_ptr(mrb, dest), s);
 
   return dest;
 }
@@ -1698,14 +1709,14 @@ aux_unlz4_gradual_check_error(MRB, enum unlz4_gradual_status status, const char 
     if (mesg) {
       mrb_raisef(mrb, E_RUNTIME_ERROR,
                  "failed %S - %S (%S)",
-                 VALUE(mesg),
-                 VALUE(unlz4_gradual_str_status(status)),
-                 VALUE((mrb_int)status));
+                 mrb_str_new_cstr(mrb, mesg),
+                 mrb_str_new_cstr(mrb, unlz4_gradual_str_status(status)),
+                 aux_int_value(mrb, status));
     } else {
       mrb_raisef(mrb, E_RUNTIME_ERROR,
                  "unlz4-gradual error - %S (%S)",
-                 VALUE(unlz4_gradual_str_status(status)),
-                 VALUE((mrb_int)status));
+                 mrb_str_new_cstr(mrb, unlz4_gradual_str_status(status)),
+                 aux_int_value(mrb, status));
     }
   }
 }
@@ -1731,13 +1742,13 @@ static const mrb_data_type unlz4g_type = {
 };
 
 static void
-unlz4g_initialize_args(MRB, VALUE self, VALUE *inport, uint32_t *prefix_capacity, struct RString **predict)
+unlz4g_initialize_args(MRB, mrb_value self, mrb_value *inport, uint32_t *prefix_capacity, struct RString **predict)
 {
   mrb_int argc;
-  VALUE *argv;
+  mrb_value *argv;
   mrb_get_args(mrb, "*", &argv, &argc);
 
-  VALUE opts;
+  mrb_value opts;
   if (argc > 0 && mrb_obj_is_kind_of(mrb, argv[argc - 1], mrb->hash_class)) {
     opts = argv[--argc];
   } else {
@@ -1757,7 +1768,7 @@ unlz4g_initialize_args(MRB, VALUE self, VALUE *inport, uint32_t *prefix_capacity
     mrbx_error_arity(mrb, argc, 1, 2);
   }
 
-  VALUE predictv;
+  mrb_value predictv;
   MRBX_SCANHASH(mrb, opts, Qnil,
                 MRBX_SCANHASH_ARGS("predict", &predictv, Qnil));
 
@@ -1768,10 +1779,10 @@ unlz4g_initialize_args(MRB, VALUE self, VALUE *inport, uint32_t *prefix_capacity
  * call-seq:
  *  initialize(inport, prefix_capacity = 65536, predict: nil)
  */
-static VALUE
-unlz4g_initialize(MRB, VALUE self)
+static mrb_value
+unlz4g_initialize(MRB, mrb_value self)
 {
-  VALUE inport;
+  mrb_value inport;
   uint32_t prefix_capacity;
   struct RString *predict;
   unlz4g_initialize_args(mrb, self, &inport, &prefix_capacity, &predict);
@@ -1797,14 +1808,14 @@ unlz4g_initialize(MRB, VALUE self)
   return self;
 }
 
-static VALUE
-unlz4g_read(MRB, VALUE self)
+static mrb_value
+unlz4g_read(MRB, mrb_value self)
 {
   struct RString *dest;
   ssize_t maxdest;
   common_read_args(mrb, &maxdest, &dest);
   struct unlz4g *g = (struct unlz4g *)mrbx_getref(mrb, self, &unlz4g_type);
-  VALUE inport = mrb_iv_get(mrb, self, id_ivar_inport);
+  mrb_value inport = mrb_iv_get(mrb, self, id_ivar_inport);
   if (maxdest < 0) { mrb_raise(mrb, E_NOTIMP_ERROR, "!"); }
 
   g->unlz4->next_out = RSTR_PTR(dest);
@@ -1832,13 +1843,13 @@ unlz4g_read(MRB, VALUE self)
 
   mrbx_str_set_len(mrb, dest, maxdest - g->unlz4->avail_out);
 
-  return (RSTR_LEN(dest) > 0 ? VALUE(dest) : Qnil);
+  return (RSTR_LEN(dest) > 0 ? mrb_obj_value(dest) : Qnil);
 }
 
 //unlz4g_close
 
-static VALUE
-unlz4g_eof(MRB, VALUE self)
+static mrb_value
+unlz4g_eof(MRB, mrb_value self)
 {
   return mrb_bool_value(((struct unlz4g *)mrbx_getref(mrb, self, &unlz4g_type))->status == UNLZ4_GRADUAL_MAYBE_FINISHED);
 }
