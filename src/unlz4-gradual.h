@@ -29,39 +29,39 @@ UNLZ4_GRADUAL_C_DECL_BEGIN
 
 struct unlz4_gradual
 {
-    const char *next_in;
-    int32_t avail_in;
-    int32_t total_in;
+  const char *next_in;
+  int32_t avail_in;
+  int32_t total_in;
 
-    char *next_out;
-    int32_t avail_out;
-    int32_t total_out;
+  char *next_out;
+  int32_t avail_out;
+  int32_t total_out;
 
-    void *opaque; /* 利用者定義のデータ */
+  void *opaque; /* 利用者定義のデータ */
 };
 
 enum unlz4_gradual_status
 {
-    /** 正常に完了しました。 */
-    UNLZ4_GRADUAL_OK = 0,
+  /** 正常に完了しました。 */
+  UNLZ4_GRADUAL_OK = 0,
 
-    /** 内部状態はちょうど終了位置にあります。これ以上入力がないのであれば正常に完了しました。 */
-    UNLZ4_GRADUAL_MAYBE_FINISHED = -1,
+  /** 内部状態はちょうど終了位置にあります。これ以上入力がないのであれば正常に完了しました。 */
+  UNLZ4_GRADUAL_MAYBE_FINISHED = -1,
 
-    /** 内部状態はさらなる入力を必要としています。next_in と avail_in を正しく設定して下さい。 */
-    UNLZ4_GRADUAL_NEED_INPUT = -2,
+  /** 内部状態はさらなる入力を必要としています。next_in と avail_in を正しく設定して下さい。 */
+  UNLZ4_GRADUAL_NEED_INPUT = -2,
 
-    /** 内部状態は出力するべきものが残っています。next_out と avail_out を正しく設定して下さい。 */
-    UNLZ4_GRADUAL_NEED_OUTPUT = -3,
+  /** 内部状態は出力するべきものが残っています。next_out と avail_out を正しく設定して下さい。 */
+  UNLZ4_GRADUAL_NEED_OUTPUT = -3,
 
-    /** メモリの確保に失敗しました。主な原因はメモリ不足か、リソース制限に達したためです。 */
-    UNLZ4_GRADUAL_ERROR_NO_MEMORY = 1,
+  /** メモリの確保に失敗しました。主な原因はメモリ不足か、リソース制限に達したためです。 */
+  UNLZ4_GRADUAL_ERROR_NO_MEMORY = 1,
 
-    /** lz4 シーケンスの offset が prefix buffer を超えたため続行できません。 */
-    UNLZ4_GRADUAL_ERROR_OUT_OF_PREFIX_BUFFER = 2,
+  /** lz4 シーケンスの offset が prefix buffer を超えたため続行できません。 */
+  UNLZ4_GRADUAL_ERROR_OUT_OF_PREFIX_BUFFER = 2,
 
-    /** 内部バグです。作者に報告して下さい。 */
-    UNLZ4_GRADUAL_ERROR_UNEXPECT_REACHED_HERE = 99,
+  /** 内部バグです。作者に報告して下さい。 */
+  UNLZ4_GRADUAL_ERROR_UNEXPECT_REACHED_HERE = 99,
 };
 
 /**
