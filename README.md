@@ -2,19 +2,17 @@
 
 mruby へ LZ4 圧縮ライブラリの機能を提供します。
 
-  * LZ4 Frame データの圧縮・伸長が行なえます。
+  - LZ4 Frame データの圧縮・伸長が行なえます。
 
     LZ4::Encoder / LZ4::Decoder
 
-  * LZ4 Block データの圧縮・伸長が行なえます。
+  - LZ4 Block データの圧縮・伸長が行なえます。
 
     LZ4::BlockEncoder / LZ4::BlockDecoder
 
 ## ****注意***
 
-  * LZ4 Frame API は ``MRB_INT16`` が定義された場合利用できません。
-
-  * LZ4 Frame API は mruby のメモリアロケータを通してメモリが確保されません。
+  - LZ4 Frame API は mruby のメモリアロケータを通してメモリが確保されません。
 
     メモリ関連で不可解な挙動があった場合、このことが原因であるかもしれません。
 
@@ -94,17 +92,17 @@ end
 
 ## Specification
 
-  * Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
-  * Version: 0.5.2
-  * Product quality: PROTOTYPE
-  * Author: [dearblue](https://github.com/dearblue)
-  * Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
-  * Licensing: [2 clause BSD License](LICENSE)
-  * Dependency external mrbgems:
-      * [mruby-aux](https://github.com/dearblue/mruby-aux)
+  - Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
+  - Version: 0.5.3
+  - Product quality: PROTOTYPE
+  - Author: [dearblue](https://github.com/dearblue)
+  - Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
+  - Licensing: [2 clause BSD License](LICENSE)
+  - Dependency external mrbgems:
+      - [mruby-aux](https://github.com/dearblue/mruby-aux)
         under [Creative Commons Zero License \(CC0\)](https://github.com/dearblue/mruby-aux/blob/master/LICENSE)
         by [dearblue](https://github.com/dearblue)
-  * Bundled C libraries (git-submodules):
-      * [lz4](https://github.com/lz4/lz4)-[1.8.3](https://github.com/lz4/lz4/tree/v1.8.3)
-        under [2 clause BSD License](https://github.com/lz4/lz4/blob/v1.8.3/LICENSE)
+  - Bundled C libraries (git-submodules):
+      - [lz4](https://github.com/lz4/lz4)-[1.9.3](https://github.com/lz4/lz4/tree/v1.9.3)
+        under [2 clause BSD License](https://github.com/lz4/lz4/blob/v1.9.3/LICENSE)
         by [Yann Collet](https://github.com/Cyan4973)

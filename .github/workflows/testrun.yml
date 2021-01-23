@@ -1,0 +1,43 @@
+name: build and test
+
+on:
+  push:
+    branches: "*"
+  pull_request:
+    branches: "*"
+
+jobs:
+  ubuntu-18-04:
+    runs-on: ubuntu-18.04
+    name: ubuntu-18.04 (mruby-${{matrix.TARGET_MRUBY}})
+    strategy:
+      matrix:
+        TARGET_MRUBY:
+        - master
+        - 2.1.2
+        - 2.1.1
+        - 2.1.0
+    env:
+      MRUBY_URL: "https://github.com/mruby/mruby/archive/${{matrix.TARGET_MRUBY}}.tar.gz"
+      MRUBY_DIR: "mruby-${{matrix.TARGET_MRUBY}}"
+      MRUBY_CONFIG: "test_config.rb"
+      LZ4_URL: "https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
+      MICROCO_URL: "https://github.com/dearblue/micro-co/archive/master.tar.gz"
+    steps:
+    - uses: actions/checkout@v2
+    - name: fetch and extract mruby
+      run: wget -O- $MRUBY_URL | tar xzf -
+    - name: fetch and extract contribs
+      run: |
+        mkdir -p contrib
+        rm -rf contrib/lz4 contrib/micro-co || true
+        wget -O- $LZ4_URL | tar xzf - -C contrib
+        mv contrib/lz4-* contrib/lz4
+        wget -O- $MICROCO_URL | tar xzf - -C contrib
+        mv contrib/micro-co-* contrib/micro-co
+    - name: pre-clean
+      run: rake -vf $MRUBY_DIR/Rakefile clean
+    - name: build
+      run: rake -mvf $MRUBY_DIR/Rakefile || rake -vf $MRUBY_DIR/Rakefile
+    - name: test
+      run: rake -vf $MRUBY_DIR/Rakefile test
