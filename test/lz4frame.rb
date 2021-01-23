@@ -10,8 +10,8 @@ end
 
 assert("LZ4 Frame API - one step processing (with arguments)") do
   s = "123456789" * 1111
-  assert_equal s, LZ4::Decoder.decode(LZ4::Encoder.encode(s, level: 9))
-  assert_equal s, LZ4.decode(LZ4.encode(s, level: 9))
+  assert_equal s, LZ4::Decoder.decode(LZ4::Encoder.encode(s, level: 1))
+  assert_equal s, LZ4.decode(LZ4.encode(s, level: 1))
   assert_raise(ArgumentError) { LZ4.encode(s, unknown_keyword: 123) }
   assert_raise(TypeError) { LZ4.encode(s, Object.new, Object.new) }
 end
