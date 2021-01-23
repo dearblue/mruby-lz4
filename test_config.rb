@@ -1,9 +1,7 @@
 MRuby::Lockfile.disable rescue nil
 
-MRuby::Build.new do |conf|
+MRuby::Build.new("host", "build") do |conf|
   toolchain :clang
-
-  conf.build_dir = "host32"
 
   enable_debug
   enable_test
@@ -14,26 +12,8 @@ MRuby::Build.new do |conf|
   gem "."
 end
 
-MRuby::Build.new("host-nan32") do |conf|
+MRuby::Build.new("host++", "build") do |conf|
   toolchain :clang
-
-  conf.build_dir = conf.name
-
-  cc.defines << %w(MRB_NAN_BOXING)
-
-  enable_debug
-  enable_test
-
-  gem core: "mruby-print"
-  gem core: "mruby-bin-mrbc"
-  gem core: "mruby-bin-mruby"
-  gem "."
-end
-
-MRuby::Build.new("host32++") do |conf|
-  toolchain :clang
-
-  conf.build_dir = conf.name
 
   enable_debug
   enable_test
