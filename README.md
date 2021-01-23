@@ -93,7 +93,7 @@ end
 ## Specification
 
   - Product name: [mruby-lz4](https://github.com/dearblue/mruby-lz4)
-  - Version: 0.5.2
+  - Version: 0.5.3
   - Product quality: PROTOTYPE
   - Author: [dearblue](https://github.com/dearblue)
   - Report issue to: <https://github.com/dearblue/mruby-lz4/issues>
