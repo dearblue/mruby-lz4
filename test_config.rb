@@ -19,6 +19,9 @@ MRuby::Build.new("host++", "build") do |conf|
   enable_test
   enable_cxx_abi
 
+  cc.flags << "-std=c++11"
+  cxx.flags << "-std=c++11"
+
   gem core: "mruby-print"
   gem core: "mruby-bin-mrbc"
   gem core: "mruby-bin-mruby"

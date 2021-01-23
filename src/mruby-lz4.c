@@ -330,7 +330,7 @@ aux_lz4f_encode_args(MRB, mrb_value opts)
     .frameInfo.contentChecksumFlag = (NIL_P(checksum) || mrb_bool(checksum)) ? LZ4F_contentChecksumEnabled : LZ4F_noContentChecksum,
     .frameInfo.frameType = LZ4F_frame,
     .frameInfo.contentSize = aux_to_u64(mrb, size),
-    .compressionLevel = aux_lz4f_compression_level(mrb, level),
+    .compressionLevel = (int)aux_lz4f_compression_level(mrb, level),
     .autoFlush = 1,
   };
 
