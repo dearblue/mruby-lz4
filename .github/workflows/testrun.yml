@@ -21,7 +21,7 @@ jobs:
       MRUBY_URL: "https://github.com/mruby/mruby/archive/${{matrix.TARGET_MRUBY}}.tar.gz"
       MRUBY_DIR: "mruby-${{matrix.TARGET_MRUBY}}"
       MRUBY_CONFIG: "test_config.rb"
-      LZ4_URL: "https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
+      LZ4_URL: "https://github.com/lz4/lz4/archive/v1.9.4.tar.gz"
       MICROCO_URL: "https://github.com/dearblue/micro-co/archive/master.tar.gz"
     steps:
     - uses: actions/checkout@v2
